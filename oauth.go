@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -32,10 +33,19 @@ var (
 	ErrNoAccessToken = errors.New("no access token in response")
 )
 
-// oauthStateStore stores temporary OAuth state for PKCE and DPoP keys
+// oauthStateStore stores temporary OAuth state for PKCE and DPoP keys with TTL
 type oauthStateStore struct {
-	states map[string]*internalOAuthState
-	mu     sync.RWMutex
+	states          map[string]*stateEntry
+	mu              sync.RWMutex
+	ttl             time.Duration
+	cleanupInterval time.Duration
+	stopCh          chan struct{}
+	stopped         bool
+}
+
+type stateEntry struct {
+	state     *internalOAuthState
+	expiresAt time.Time
 }
 
 type internalOAuthState struct {
@@ -43,27 +53,95 @@ type internalOAuthState struct {
 	DPoPKey      interface{} // *ecdsa.PrivateKey
 }
 
-var globalStateStore = &oauthStateStore{
-	states: make(map[string]*internalOAuthState),
+const (
+	// DefaultStateStoreTTL is the default time-to-live for OAuth state entries (10 minutes)
+	DefaultStateStoreTTL = 10 * time.Minute
+	// DefaultCleanupInterval is how often the cleanup goroutine runs (1 minute)
+	DefaultCleanupInterval = 1 * time.Minute
+)
+
+var globalStateStore = newOAuthStateStore(DefaultStateStoreTTL)
+
+// newOAuthStateStore creates a new OAuth state store with the given TTL
+func newOAuthStateStore(ttl time.Duration) *oauthStateStore {
+	return newOAuthStateStoreWithInterval(ttl, DefaultCleanupInterval)
+}
+
+// newOAuthStateStoreWithInterval creates a new OAuth state store with custom TTL and cleanup interval
+func newOAuthStateStoreWithInterval(ttl, cleanupInterval time.Duration) *oauthStateStore {
+	store := &oauthStateStore{
+		states:          make(map[string]*stateEntry),
+		ttl:             ttl,
+		cleanupInterval: cleanupInterval,
+		stopCh:          make(chan struct{}),
+	}
+	go store.cleanupExpired()
+	return store
 }
 
 func (s *oauthStateStore) set(state string, oauth *internalOAuthState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.states[state] = oauth
+	s.states[state] = &stateEntry{
+		state:     oauth,
+		expiresAt: time.Now().Add(s.ttl),
+	}
 }
 
 func (s *oauthStateStore) get(state string) (*internalOAuthState, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	oauth, exists := s.states[state]
-	return oauth, exists
+
+	entry, exists := s.states[state]
+	if !exists {
+		return nil, false
+	}
+
+	// Check if expired
+	if time.Now().After(entry.expiresAt) {
+		return nil, false
+	}
+
+	return entry.state, true
 }
 
 func (s *oauthStateStore) delete(state string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.states, state)
+}
+
+// cleanupExpired removes expired entries from the store
+func (s *oauthStateStore) cleanupExpired() {
+	ticker := time.NewTicker(s.cleanupInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.mu.Lock()
+			now := time.Now()
+			for key, entry := range s.states {
+				if now.After(entry.expiresAt) {
+					delete(s.states, key)
+				}
+			}
+			s.mu.Unlock()
+		case <-s.stopCh:
+			return
+		}
+	}
+}
+
+// stop gracefully stops the cleanup goroutine (used for testing/shutdown)
+func (s *oauthStateStore) stop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.stopped {
+		close(s.stopCh)
+		s.stopped = true
+	}
 }
 
 // StartAuthFlow initiates the OAuth authorization flow for a given handle.

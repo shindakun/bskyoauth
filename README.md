@@ -175,10 +175,119 @@ The library is organized into several modules:
 
 ## Security
 
+### ⚠️ HTTPS Required for Production
+
+**CRITICAL: This library MUST be used with HTTPS in production environments.**
+
+OAuth 2.0 authorization flows transmit sensitive data including:
+- Authorization codes
+- State parameters
+- Session cookies
+- Access tokens
+
+**Running OAuth over HTTP exposes these credentials to interception and compromise.**
+
+For local development on `localhost`, HTTP is acceptable. For any production or publicly accessible deployment, HTTPS is mandatory.
+
+### Security Features
+
 - Uses PKCE (Proof Key for Code Exchange) for authorization
 - Implements DPoP (Demonstrating Proof-of-Possession) for token binding
 - Automatic nonce handling and retry logic
-- Secure session ID generation
+- Secure session ID generation (cryptographically random)
+- OAuth state expiration (10-minute TTL) with automatic cleanup
+
+### Production Deployment Best Practices
+
+#### 1. Always Use HTTPS
+- Use TLS 1.2 or higher
+- Obtain certificates from a trusted CA (Let's Encrypt is free)
+- Use a reverse proxy (nginx, Caddy, Traefik) for TLS termination
+
+#### 2. Cookie Security
+Configure secure session cookies in production:
+```go
+http.SetCookie(w, &http.Cookie{
+    Name:     "session_id",
+    Value:    sessionID,
+    Path:     "/",
+    HttpOnly: true,           // Prevents JavaScript access
+    Secure:   true,           // HTTPS only - REQUIRED in production
+    SameSite: http.SameSiteLaxMode, // CSRF protection
+    MaxAge:   86400,          // 24 hours (adjust as needed)
+})
+```
+
+#### 3. Session Storage
+- Use persistent session storage (Redis, database) instead of in-memory store
+- Implement session expiration and cleanup
+- Consider encrypted storage for sensitive session data
+
+#### 4. Rate Limiting
+Implement rate limiting on sensitive endpoints:
+- `/login` - Prevent brute force attacks
+- `/callback` - Prevent token exchange attacks
+- API endpoints - Prevent abuse
+
+#### 5. Environment Configuration
+```bash
+# Production
+BASE_URL=https://yourdomain.com
+
+# Development
+BASE_URL=http://localhost:8181
+```
+
+#### 6. Reverse Proxy Configuration
+
+**Nginx Example:**
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name yourdomain.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://localhost:8181;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+**Caddy Example (automatic HTTPS):**
+```
+yourdomain.com {
+    reverse_proxy localhost:8181
+}
+```
+
+#### 7. Additional Security Measures
+- Keep dependencies updated (`go get -u ./...`)
+- Monitor for security advisories
+- Implement logging for security events
+- Use environment variables for sensitive configuration
+- Never commit credentials or secrets to version control
+
+### Security Checklist for Production
+
+- [ ] Application served over HTTPS
+- [ ] TLS certificates valid and from trusted CA
+- [ ] Cookie `Secure` flag enabled
+- [ ] Cookie `HttpOnly` flag enabled
+- [ ] Cookie `SameSite` attribute set
+- [ ] Session expiration configured
+- [ ] Persistent session storage implemented
+- [ ] Rate limiting enabled
+- [ ] Security headers configured (CSP, HSTS, etc.)
+- [ ] Dependencies up to date
+- [ ] Logging and monitoring enabled
+- [ ] Secrets stored in environment variables or secret manager
 
 ## Requirements
 

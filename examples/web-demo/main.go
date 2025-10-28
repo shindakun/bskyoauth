@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/shindakun/bskyoauth"
@@ -14,6 +15,14 @@ func main() {
 	baseURL := os.Getenv("BASE_URL")
 	if baseURL == "" {
 		baseURL = "http://localhost:8181"
+	}
+
+	// Security check: warn if not using HTTPS in non-local environments
+	if !strings.HasPrefix(baseURL, "https://") && !strings.Contains(baseURL, "localhost") && !strings.Contains(baseURL, "127.0.0.1") {
+		log.Println("⚠️  WARNING: BASE_URL is not using HTTPS!")
+		log.Println("⚠️  OAuth flows over HTTP expose credentials to interception.")
+		log.Println("⚠️  HTTPS is REQUIRED for production deployments.")
+		log.Println("⚠️  See README.md Security section for deployment guidance.")
 	}
 
 	// Create OAuth client
@@ -31,6 +40,9 @@ func main() {
 
 	log.Println("Server starting on :8181")
 	log.Println("Base URL:", baseURL)
+	if strings.HasPrefix(baseURL, "https://") {
+		log.Println("✓ Using HTTPS - secure configuration")
+	}
 	log.Fatal(http.ListenAndServe(":8181", nil))
 }
 
