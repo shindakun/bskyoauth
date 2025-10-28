@@ -242,27 +242,27 @@ For local development on `localhost`, HTTP is acceptable. For any production or 
 
 - Uses PKCE (Proof Key for Code Exchange) for authorization
 - Implements DPoP (Demonstrating Proof-of-Possession) for token binding
-- **JWT access token validation** with signature verification (CRITICAL)
 - Automatic nonce handling and retry logic
 - Secure session ID generation (cryptographically random)
 - OAuth state expiration (10-minute TTL) with automatic cleanup
+- Issuer validation to prevent authorization code injection attacks
 
-### JWT Token Validation
+### Access Token Handling
 
-**All access tokens are automatically validated** during the OAuth flow completion. This prevents:
-- **Token Forgery**: Signature verification ensures tokens are authentic
-- **Replay Attacks**: Expiration validation limits token lifetime
-- **Issuer Spoofing**: Issuer claim validation prevents token substitution
-- **Algorithm Attacks**: Only ES256 (ECDSA P-256) tokens are accepted
+Per the [AT Protocol OAuth specification](https://atproto.com/specs/oauth), **access tokens are opaque from the client's perspective**. This library follows the spec:
 
-The validation process includes:
+- **Tokens are treated as opaque strings** - no client-side signature validation is performed
+- **Server-side validation**: The PDS (Resource Server) validates tokens when they're used
+- **DPoP binding**: All tokens are bound to unique session keys via DPoP proofs
+- **Automatic expiration**: Tokens include expiration times enforced by the server
 
-1. **Signature Verification**: Fetches public keys from authorization server's JWKS endpoint
-2. **Claim Validation**: Verifies issuer (`iss`), subject (`sub`), expiration (`exp`), and issued-at (`iat`)
-3. **Algorithm Enforcement**: Only ES256 algorithm is accepted (prevents downgrade attacks)
-4. **JWKS Caching**: Keys are cached for 1 hour to minimize network overhead
+While tokens may be JWTs internally, the library does not validate signatures or claims. This is intentional and follows the AT Protocol design where:
 
-**This validation happens automatically** - no additional configuration required. Validation failures are logged for security monitoring and the authentication flow is rejected.
+1. Token validation is the responsibility of the Resource Server (PDS)
+2. DPoP provides proof-of-possession security
+3. Tokens are bound to specific client instances and cannot be reused
+
+The library parses JWTs only to extract the user's DID for session management, but treats the token as opaque for all other purposes.
 
 ### Production Deployment Best Practices
 

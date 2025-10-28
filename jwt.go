@@ -104,26 +104,63 @@ func (c *JWKSCache) fetchJWKS(jwksURI string) error {
 		return fmt.Errorf("%w: status %d, body: %s", ErrJWKSFetch, resp.StatusCode, string(body))
 	}
 
+	// Read the response body for debugging
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("%w: failed to read response body: %v", ErrJWKSFetch, err)
+	}
+
+	// DEBUG: Log raw JWKS response
+	fmt.Printf("\n=== DEBUG: Raw JWKS Response ===\n%s\n=== END Raw JWKS Response ===\n\n", string(bodyBytes))
+
 	var jwksResp jwksResponse
-	if err := json.NewDecoder(resp.Body).Decode(&jwksResp); err != nil {
+	if err := json.Unmarshal(bodyBytes, &jwksResp); err != nil {
 		return fmt.Errorf("%w: failed to decode JWKS: %v", ErrJWKSFetch, err)
 	}
 
+	// DEBUG: Log total number of keys
+	fmt.Printf("DEBUG: Total keys in JWKS: %d\n\n", len(jwksResp.Keys))
+
 	// Parse and store keys
 	newKeys := make(map[string]*ecdsa.PublicKey)
-	for _, key := range jwksResp.Keys {
-		if key.Kty != "EC" || key.Crv != "P-256" {
-			// Skip non-ECDSA P-256 keys
+	for i, key := range jwksResp.Keys {
+		// DEBUG: Log each key's details
+		fmt.Printf("DEBUG: Key #%d:\n", i+1)
+		fmt.Printf("  kty: %q\n", key.Kty)
+		fmt.Printf("  crv: %q\n", key.Crv)
+		fmt.Printf("  kid: %q\n", key.Kid)
+		fmt.Printf("  alg: %q\n", key.Alg)
+		fmt.Printf("  use: %q\n", key.Use)
+
+		if key.Kty != "EC" {
+			fmt.Printf("  SKIPPED: kty is %q, expected \"EC\"\n\n", key.Kty)
+			continue
+		}
+
+		if key.Crv != "P-256" {
+			fmt.Printf("  SKIPPED: crv is %q, expected \"P-256\"\n\n", key.Crv)
 			continue
 		}
 
 		pubKey, err := parseECDSAPublicKey(key)
 		if err != nil {
 			// Log error but don't fail - other keys might be valid
+			fmt.Printf("  SKIPPED: Failed to parse key: %v\n\n", err)
 			continue
 		}
 
+		fmt.Printf("  SUCCESS: Key parsed and added to cache\n\n")
 		newKeys[key.Kid] = pubKey
+	}
+
+	// DEBUG: Final summary
+	fmt.Printf("DEBUG: Summary - Successfully parsed %d out of %d keys\n", len(newKeys), len(jwksResp.Keys))
+	if len(newKeys) > 0 {
+		fmt.Printf("DEBUG: Successfully cached key IDs: ")
+		for kid := range newKeys {
+			fmt.Printf("%q ", kid)
+		}
+		fmt.Printf("\n\n")
 	}
 
 	if len(newKeys) == 0 {

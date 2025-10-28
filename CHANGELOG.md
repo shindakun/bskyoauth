@@ -8,19 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **CRITICAL SECURITY**: Added JWT access token validation with signature verification
-- Added `JWKSURI` field to `AuthServerMetadata` for public key retrieval
-- Added comprehensive JWT validation module (jwt.go) with JWKS cache
-- Added `JWKSCache` type for caching public keys with 1-hour TTL
-- Added `validateAccessToken()` function with full signature and claim validation
-- Added 6 new JWT-related errors: `ErrInvalidToken`, `ErrTokenExpired`, `ErrInvalidSignature`, `ErrInvalidIssuer`, `ErrJWKSFetch`, `ErrInvalidAlgorithm`, `ErrMissingClaims`
-- Added comprehensive test suite for JWT validation (jwt_test.go)
-- Added 13 test cases covering token validation, expiration, signatures, claims, and caching
+- Added `DID` field to `internalOAuthState` for reliable session creation
+- Added `JWKSURI` field to `AuthServerMetadata` (not currently used, reserved for future)
+- Comprehensive JWT validation module (jwt.go) remains available for future use or custom implementations
+- JWT test suite (jwt_test.go) provides examples of token validation if needed
 - OAuth state store now includes automatic expiration and cleanup mechanism
-- Added `DefaultStateStoreTTL` constant (10 minutes) for OAuth state entry lifetime
-- Added `DefaultCleanupInterval` constant (1 minute) for cleanup goroutine interval
-- Added automatic background cleanup goroutine to remove expired OAuth state entries
-- Added graceful shutdown support for cleanup goroutine via `stop()` method
+
+### Changed
+- **IMPORTANT**: Removed automatic JWT signature validation to comply with AT Protocol OAuth spec
+  - Per [AT Protocol spec](https://atproto.com/specs/oauth), access tokens are "opaque from the client's perspective"
+  - Token validation is the responsibility of the Resource Server (PDS), not the client
+  - DPoP proof-of-possession provides token binding security
+  - Tokens are validated by the PDS when used, not during OAuth flow
+- Access tokens now treated as opaque strings per spec
+- JWT parsing only used to extract DID for session management (fallback to OAuth state DID if unavailable)
+- Improved resilience: if token parsing fails, DID from OAuth state is used instead
 - **SECURITY**: Added comprehensive HTTPS enforcement documentation in README
 - **SECURITY**: Added production deployment security checklist
 - **SECURITY**: Added reverse proxy configuration examples (nginx, Caddy)
@@ -47,12 +49,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `Stop()` method for graceful cleanup goroutine shutdown
 - Added 7 test cases for session expiration, cleanup, and TTL configuration
 
-### Changed
-- **CRITICAL SECURITY**: `CompleteAuthFlow` now validates JWT access tokens with signature verification
-- Access tokens are verified using public keys from authorization server's JWKS endpoint
-- Manual JWT base64 decoding replaced with proper cryptographic validation
-- Validation failures logged to stderr for security monitoring
-- Total test count increased from 85 to 101 tests (added 16 JWT validation tests)
 - **SECURITY**: Sessions now automatically expire after 30 days (matches cookie MaxAge, configurable)
 - **SECURITY**: MemorySessionStore enhanced with TTL tracking and automatic cleanup
 - Session cleanup goroutine runs every 5 minutes to remove expired sessions
@@ -70,11 +66,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Logout handler now properly clears cookies with matching security attributes
 
 ### Fixed
-- **CRITICAL SECURITY**: Fixed lack of JWT signature verification - tokens now validated cryptographically
-- **CRITICAL SECURITY**: Fixed vulnerability to token forgery attacks
-- **CRITICAL SECURITY**: Fixed vulnerability to replay attacks with expired tokens
-- **CRITICAL SECURITY**: Fixed vulnerability to issuer spoofing via token substitution
-- **CRITICAL SECURITY**: Fixed vulnerability to algorithm downgrade attacks (now ES256 only)
 - **SECURITY**: Fixed memory leak where abandoned OAuth authorization flows would persist indefinitely
 - **SECURITY**: Fixed potential DoS vector from accumulating expired state entries
 - Fixed DPoP private keys remaining in memory after failed/abandoned auth flows
@@ -84,16 +75,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CRITICAL**: Fixed DPoP nonce not persisting across requests causing replay errors
 
 ### Technical Details
-- **JWT Validation:** Access tokens validated with ES256 (ECDSA P-256) signature verification
-- Public keys fetched from authorization server's JWKS endpoint (`jwks_uri` in metadata)
-- Required claims validated: `iss` (issuer), `sub` (subject/DID), `exp` (expiration), `iat` (issued-at)
-- Algorithm enforcement: Only ES256 accepted, prevents algorithm downgrade attacks
-- Clock skew tolerance: 5 minutes allowed for `iat` validation
-- JWKS caching: Public keys cached for 1 hour to minimize network overhead
-- Global JWKS cache per authorization server (thread-safe with RWMutex)
-- Automatic JWKS refresh when cached keys don't match token `kid`
-- Validation failures logged to stderr with issuer and error details
-- Failed validations reject authentication flow before session creation
+- **Access Token Handling:** Per AT Protocol spec, access tokens treated as opaque strings
+- Tokens validated server-side by PDS when used, not during OAuth flow
+- DPoP proof-of-possession provides token binding security
+- JWT parsing used only to extract DID for session management (with fallback to OAuth state)
 - **Session expiration:** Default 30-day TTL (2,592,000 seconds) matches cookie MaxAge
 - Sessions wrapped in `sessionEntry` struct with `expiresAt` timestamp
 - Session cleanup goroutine runs every 5 minutes (configurable)

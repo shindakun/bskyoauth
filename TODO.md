@@ -158,35 +158,39 @@ http.SetCookie(w, &http.Cookie{
 
 ---
 
-### 7. JWT Token Validation Missing ✅ **COMPLETED**
-**Files:** [jwt.go](jwt.go), [oauth.go:292-316](oauth.go#L292-L316), [jwt_test.go](jwt_test.go)
+### 7. JWT Token Validation - NOT APPLICABLE ⚠️
+**File:** [oauth.go:292-315](oauth.go#L292-L315)
 
-**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+**Status:** NOT REQUIRED per AT Protocol OAuth Specification
 
-**Issue:** Access token JWT was parsed but not validated:
+**Original Issue:** Access token JWT is parsed but not validated:
 - No signature verification
 - No expiration check
 - No issuer validation
-- Trusted token claims without verification
+- Trusts token claims without verification
 
-**Implementation:**
-- ✅ Added comprehensive JWT validation module (jwt.go) with signature verification
-- ✅ Added `JWKSCache` for caching public keys from authorization server (1-hour TTL)
-- ✅ Added `validateAccessToken()` function with full cryptographic validation
-- ✅ Signature verification using ECDSA P-256 public keys from JWKS endpoint
-- ✅ Claim validation: `iss` (issuer), `sub` (subject/DID), `exp` (expiration), `iat` (issued-at)
-- ✅ Algorithm enforcement: Only ES256 accepted (prevents downgrade attacks)
-- ✅ Clock skew tolerance: 5 minutes for `iat` validation
-- ✅ Global JWKS cache per authorization server (thread-safe)
-- ✅ Automatic JWKS refresh when cached keys don't match token `kid`
-- ✅ Security event logging for validation failures
-- ✅ Updated `CompleteAuthFlow` to validate tokens before session creation
-- ✅ Added 6 new error types for JWT validation failures
-- ✅ Added 13 comprehensive test cases covering all validation scenarios
-- ✅ Documentation added to README.md with security benefits
-- ✅ Total test count increased from 85 to 101 tests
+**Resolution:**
+Per the [AT Protocol OAuth specification](https://atproto.com/specs/oauth), **access tokens are intentionally opaque from the client's perspective**. The spec states:
 
-**Impact:** Prevents token forgery, replay attacks, issuer spoofing, and algorithm downgrade attacks.
+> "Access tokens are used to authorize client requests to the account's PDS ('Resource Server'). From the standpoint of the client they are opaque, but they are often signed JWTs including an expiration time."
+
+**Why JWT validation is NOT performed:**
+1. **Spec Compliance**: AT Protocol explicitly requires clients to treat tokens as opaque
+2. **Server-Side Validation**: Token validation is the responsibility of the Resource Server (PDS), not the client
+3. **DPoP Security**: Token security is provided through DPoP (Demonstrating Proof-of-Possession) binding
+4. **Automatic Validation**: Tokens are validated by the PDS on first use anyway
+
+**Current Implementation:**
+- Access tokens treated as opaque strings per spec
+- JWT parsing only used to extract DID for session management
+- Fallback to OAuth state DID if token parsing fails
+- No signature verification or claim validation performed
+
+**Available Resources:**
+- jwt.go and jwt_test.go remain in codebase for reference or custom implementations
+- Full JWT validation example code available if needed for other purposes
+
+**Impact:** This is the CORRECT behavior per AT Protocol specification. Client-side JWT validation would be redundant and against spec.
 
 ---
 

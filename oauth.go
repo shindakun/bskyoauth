@@ -18,7 +18,6 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"github.com/golang-jwt/jwt/v5"
 )
 
 var (
@@ -57,6 +56,7 @@ type internalOAuthState struct {
 	CodeVerifier   string
 	DPoPKey        interface{} // *ecdsa.PrivateKey
 	ExpectedIssuer string      // Expected authorization server for validation
+	DID            string      // User's DID for session creation
 }
 
 const (
@@ -190,6 +190,7 @@ func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowSta
 		CodeVerifier:   codeVerifier,
 		DPoPKey:        dpopKey,
 		ExpectedIssuer: authServer,
+		DID:            string(ident.DID),
 	})
 
 	metadataURL := authServer + "/.well-known/oauth-authorization-server"
@@ -289,30 +290,29 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, code, state, issuer strin
 		return nil, fmt.Errorf("%w: %s", ErrNoAccessToken, string(tokensJSON))
 	}
 
-	// Validate access token JWT with signature verification
-	// This prevents token forgery, replay attacks, and expired token acceptance
-	if metadata.JWKSURI == "" {
-		return nil, errors.New("no JWKS URI in authorization server metadata")
+	// Extract DID from token
+	// Per AT Protocol spec, access tokens are opaque from client perspective,
+	// but in practice they're JWTs. We parse to extract the DID for session management.
+	// Note: We do NOT validate the signature - validation happens server-side when used.
+	var sub string
+	parts := strings.Split(accessToken, ".")
+	if len(parts) == 3 {
+		// Token appears to be a JWT, try to parse it
+		payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+		if err == nil {
+			var claims map[string]interface{}
+			if err := json.Unmarshal(payload, &claims); err == nil {
+				if s, ok := claims["sub"].(string); ok {
+					sub = s
+				}
+			}
+		}
 	}
 
-	validatedToken, err := validateAccessToken(accessToken, issuer, metadata.JWKSURI)
-	if err != nil {
-		// Log validation failure for security monitoring
-		fmt.Fprintf(os.Stderr, "SECURITY: Access token validation failed - issuer: %s, error: %v\n",
-			issuer, err)
-		return nil, fmt.Errorf("access token validation failed: %w", err)
-	}
-
-	// Extract validated claims
-	claims, ok := validatedToken.Claims.(jwt.MapClaims)
-	if !ok {
-		return nil, errors.New("invalid token claims format")
-	}
-
-	// Extract DID from sub claim (already validated by validateAccessToken)
-	sub, ok := claims["sub"].(string)
-	if !ok || sub == "" {
-		return nil, errors.New("no sub claim in validated token")
+	// If we couldn't extract DID from token, that's okay - use the DID from OAuth state
+	// The token will be validated by the PDS when we make our first API call
+	if sub == "" {
+		sub = oauthState.DID
 	}
 
 	refreshToken, _ := tokens["refresh_token"].(string)
