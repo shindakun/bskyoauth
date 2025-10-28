@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added 15 test cases covering session store operations, ID generation, concurrency, and stress testing
 - Added comprehensive test suite for Client functionality (client_test.go)
 - Added 16 test cases covering client initialization, metadata, session management, and edge cases
+- Added comprehensive test suite for DPoP functionality (dpop_test.go)
+- Added 22 test cases covering key generation, proof creation, JWT structure, transport, and nonce handling
 
 ### Changed
 - **SECURITY**: OAuth state entries now automatically expire after 10 minutes to prevent memory leaks
