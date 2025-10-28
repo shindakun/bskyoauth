@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SECURITY**: Added `ErrIssuerMismatch` error for detecting attack attempts
 - **SECURITY**: Added security event logging for issuer mismatch detection
 - Added `ExpectedIssuer` field to OAuth state for validation during callback
+- **SECURITY**: Added IP-based rate limiting using golang.org/x/time/rate
+- Added `RateLimiter` type with configurable rate and burst limits
+- Added rate limiting middleware for HTTP endpoints
+- Web-demo example now includes rate limiting on auth and API endpoints
 
 ### Changed
 - **SECURITY**: OAuth state entries now automatically expire after 10 minutes to prevent memory leaks
@@ -51,6 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Each DPoP proof guaranteed unique to prevent server-side replay detection
 - Error messages sanitized: detailed errors logged to stderr, generic messages returned to users
 - Two error locations sanitized: auth metadata requests and token exchange failures
+- Rate limiting implemented using token bucket algorithm from golang.org/x/time/rate
+- Separate rate limiters for auth endpoints (5 req/s) and API endpoints (10 req/s)
+- IP-based rate limiting with X-Forwarded-For support for proxied requests
+- Automatic cleanup of idle rate limiters to prevent memory leaks
 
 ### Migration Notes
 - This is a backwards-compatible change with no API modifications

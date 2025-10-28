@@ -160,21 +160,30 @@ http.SetCookie(w, &http.Cookie{
 
 ---
 
-### 8. Missing Rate Limiting
-**Files:** [client.go](client.go), [examples/web-demo/main.go](examples/web-demo/main.go)
+### 8. Missing Rate Limiting ✅ **COMPLETED**
+**Files:** [ratelimit.go](ratelimit.go), [examples/web-demo/main.go:31-47](examples/web-demo/main.go#L31-L47)
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
 
 **Issue:** No rate limiting on:
-- Login attempts
-- OAuth callback endpoint
-- API operations
+- Login attempts - vulnerable to brute force
+- OAuth callback endpoint - vulnerable to enumeration
+- API operations - vulnerable to DoS
 
-**Recommendation:**
-- Implement rate limiting middleware
-- Use libraries like `golang.org/x/time/rate` or `github.com/ulule/limiter`
-- Apply limits to sensitive endpoints (login, callback, post)
-- Consider IP-based and session-based limits
+**Implementation:**
+- ✅ Created `RateLimiter` type using golang.org/x/time/rate
+- ✅ Token bucket algorithm with configurable rate and burst limits
+- ✅ IP-based rate limiting per endpoint
+- ✅ Middleware pattern for easy integration
+- ✅ X-Forwarded-For header support for proxied requests
+- ✅ Automatic cleanup of idle limiters (prevents memory leaks)
+- ✅ Applied to web-demo example:
+  - Auth endpoints (login, callback): 5 req/s, burst 10
+  - API endpoints (post, create, delete): 10 req/s, burst 20
+- ✅ Returns HTTP 429 (Too Many Requests) when limit exceeded
+- ✅ Periodic cleanup every 5 minutes
 
-**Impact:** Prevents brute force and DoS attacks.
+**Impact:** Prevents brute force, enumeration, and DoS attacks on sensitive endpoints.
 
 ---
 
