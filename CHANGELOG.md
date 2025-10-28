@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Web-demo example now includes rate limiting on auth and API endpoints
 - Added comprehensive test suite for rate limiter (ratelimit_test.go)
 - Added 10 test cases covering rate limiting behavior, IP extraction, cleanup, and concurrency
+- Added comprehensive test suite for session management (session_test.go)
+- Added 15 test cases covering session store operations, ID generation, concurrency, and stress testing
 
 ### Changed
 - **SECURITY**: OAuth state entries now automatically expire after 10 minutes to prevent memory leaks
