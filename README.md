@@ -242,9 +242,27 @@ For local development on `localhost`, HTTP is acceptable. For any production or 
 
 - Uses PKCE (Proof Key for Code Exchange) for authorization
 - Implements DPoP (Demonstrating Proof-of-Possession) for token binding
+- **JWT access token validation** with signature verification (CRITICAL)
 - Automatic nonce handling and retry logic
 - Secure session ID generation (cryptographically random)
 - OAuth state expiration (10-minute TTL) with automatic cleanup
+
+### JWT Token Validation
+
+**All access tokens are automatically validated** during the OAuth flow completion. This prevents:
+- **Token Forgery**: Signature verification ensures tokens are authentic
+- **Replay Attacks**: Expiration validation limits token lifetime
+- **Issuer Spoofing**: Issuer claim validation prevents token substitution
+- **Algorithm Attacks**: Only ES256 (ECDSA P-256) tokens are accepted
+
+The validation process includes:
+
+1. **Signature Verification**: Fetches public keys from authorization server's JWKS endpoint
+2. **Claim Validation**: Verifies issuer (`iss`), subject (`sub`), expiration (`exp`), and issued-at (`iat`)
+3. **Algorithm Enforcement**: Only ES256 algorithm is accepted (prevents downgrade attacks)
+4. **JWKS Caching**: Keys are cached for 1 hour to minimize network overhead
+
+**This validation happens automatically** - no additional configuration required. Validation failures are logged for security monitoring and the authentication flow is rejected.
 
 ### Production Deployment Best Practices
 

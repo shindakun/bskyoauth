@@ -189,4 +189,5 @@ type AuthServerMetadata struct {
 	AuthorizationEndpoint string `json:"authorization_endpoint"`
 	TokenEndpoint         string `json:"token_endpoint"`
 	Issuer                string `json:"issuer"`
+	JWKSURI               string `json:"jwks_uri"`
 }

@@ -18,6 +18,7 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 var (
@@ -288,29 +289,30 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, code, state, issuer strin
 		return nil, fmt.Errorf("%w: %s", ErrNoAccessToken, string(tokensJSON))
 	}
 
-	// Get DID from token
-	parts := strings.Split(accessToken, ".")
-	if len(parts) != 3 {
-		return nil, errors.New("invalid JWT format")
+	// Validate access token JWT with signature verification
+	// This prevents token forgery, replay attacks, and expired token acceptance
+	if metadata.JWKSURI == "" {
+		return nil, errors.New("no JWKS URI in authorization server metadata")
 	}
 
-	// Decode payload (second part)
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	validatedToken, err := validateAccessToken(accessToken, issuer, metadata.JWKSURI)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode token payload: %w", err)
+		// Log validation failure for security monitoring
+		fmt.Fprintf(os.Stderr, "SECURITY: Access token validation failed - issuer: %s, error: %v\n",
+			issuer, err)
+		return nil, fmt.Errorf("access token validation failed: %w", err)
 	}
 
-	// Parse claims
-	var claims map[string]interface{}
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return nil, fmt.Errorf("failed to parse token claims: %w", err)
+	// Extract validated claims
+	claims, ok := validatedToken.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, errors.New("invalid token claims format")
 	}
 
-	// Extract DID from sub claim
+	// Extract DID from sub claim (already validated by validateAccessToken)
 	sub, ok := claims["sub"].(string)
 	if !ok || sub == "" {
-		claimsJSON, _ := json.Marshal(claims)
-		return nil, fmt.Errorf("no sub claim in token, claims: %s", string(claimsJSON))
+		return nil, errors.New("no sub claim in validated token")
 	}
 
 	refreshToken, _ := tokens["refresh_token"].(string)

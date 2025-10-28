@@ -158,22 +158,35 @@ http.SetCookie(w, &http.Cookie{
 
 ---
 
-### 7. JWT Token Validation Missing
-**File:** [oauth.go:193-216](oauth.go#L193-L216)
+### 7. JWT Token Validation Missing ✅ **COMPLETED**
+**Files:** [jwt.go](jwt.go), [oauth.go:292-316](oauth.go#L292-L316), [jwt_test.go](jwt_test.go)
 
-**Issue:** Access token JWT is parsed but not validated:
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+
+**Issue:** Access token JWT was parsed but not validated:
 - No signature verification
 - No expiration check
 - No issuer validation
-- Trusts token claims without verification
+- Trusted token claims without verification
 
-**Recommendation:**
-- Add JWT signature verification using public key from issuer
-- Validate `exp` (expiration), `iss` (issuer), `aud` (audience)
-- Consider using established JWT library validation
-- Verify token hasn't been tampered with
+**Implementation:**
+- ✅ Added comprehensive JWT validation module (jwt.go) with signature verification
+- ✅ Added `JWKSCache` for caching public keys from authorization server (1-hour TTL)
+- ✅ Added `validateAccessToken()` function with full cryptographic validation
+- ✅ Signature verification using ECDSA P-256 public keys from JWKS endpoint
+- ✅ Claim validation: `iss` (issuer), `sub` (subject/DID), `exp` (expiration), `iat` (issued-at)
+- ✅ Algorithm enforcement: Only ES256 accepted (prevents downgrade attacks)
+- ✅ Clock skew tolerance: 5 minutes for `iat` validation
+- ✅ Global JWKS cache per authorization server (thread-safe)
+- ✅ Automatic JWKS refresh when cached keys don't match token `kid`
+- ✅ Security event logging for validation failures
+- ✅ Updated `CompleteAuthFlow` to validate tokens before session creation
+- ✅ Added 6 new error types for JWT validation failures
+- ✅ Added 13 comprehensive test cases covering all validation scenarios
+- ✅ Documentation added to README.md with security benefits
+- ✅ Total test count increased from 85 to 101 tests
 
-**Impact:** Critical - prevents token forgery and replay attacks.
+**Impact:** Prevents token forgery, replay attacks, issuer spoofing, and algorithm downgrade attacks.
 
 ---
 
