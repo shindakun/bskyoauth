@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `RateLimiter` type with configurable rate and burst limits
 - Added rate limiting middleware for HTTP endpoints
 - Web-demo example now includes rate limiting on auth and API endpoints
+- Added comprehensive test suite for rate limiter (ratelimit_test.go)
+- Added 10 test cases covering rate limiting behavior, IP extraction, cleanup, and concurrency
 
 ### Changed
 - **SECURITY**: OAuth state entries now automatically expire after 10 minutes to prevent memory leaks
