@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **DOCUMENTATION**: Expanded Security section in README with prominent HTTPS warnings
 - **DOCUMENTATION**: Added detailed production deployment guidelines
 - Example application now validates BASE_URL and warns when HTTPS is not used
+- **SECURITY**: Session cookies now include Secure flag when using HTTPS
+- **SECURITY**: Session cookies now have 24-hour MaxAge expiration
+- Logout handler now properly clears cookies with matching security attributes
 
 ### Fixed
 - **SECURITY**: Fixed memory leak where abandoned OAuth authorization flows would persist indefinitely
@@ -59,6 +62,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Separate rate limiters for auth endpoints (5 req/s) and API endpoints (10 req/s)
 - IP-based rate limiting with X-Forwarded-For support for proxied requests
 - Automatic cleanup of idle rate limiters to prevent memory leaks
+- Cookie security: Secure flag automatically enabled for HTTPS deployments
+- Cookie expiration: 24-hour MaxAge prevents indefinite session lifetime
+- Cookie attributes preserved during logout for proper cookie deletion
 
 ### Migration Notes
 - This is a backwards-compatible change with no API modifications

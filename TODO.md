@@ -7,28 +7,38 @@ This security audit identified multiple areas for improvement in the bskyoauth l
 
 ## Critical Priority Issues
 
-### 1. Session Cookie Security Enhancement
-**File:** [examples/web-demo/main.go:115-121](examples/web-demo/main.go#L115-L121)
+### 1. Session Cookie Security Enhancement ✅ **COMPLETED**
+**File:** [examples/web-demo/main.go:137-157](examples/web-demo/main.go#L137-L157), [examples/web-demo/main.go:270-297](examples/web-demo/main.go#L270-L297)
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
 
 **Issue:** Session cookies lack `Secure` flag and session expiration controls.
 
-**Current Code:**
+**Implementation:**
+- ✅ Added `Secure` flag with automatic HTTPS detection
+  - Checks BASE_URL environment variable
+  - Enables Secure flag when https:// is detected
+  - Safe for localhost development (HTTP allowed)
+- ✅ Added `MaxAge: 86400` (24 hours) for session expiration
+- ✅ Updated callback success handler with enhanced cookie security
+- ✅ Updated logout handler to match cookie attributes for proper deletion
+- ✅ Maintained HttpOnly and SameSite protections
+- ✅ Environment-aware: automatically adapts to deployment context
+
+**Cookie Configuration:**
 ```go
 http.SetCookie(w, &http.Cookie{
     Name:     "session_id",
     Value:    sessionID,
     Path:     "/",
-    HttpOnly: true,
-    SameSite: http.SameSiteLaxMode,
+    HttpOnly: true,                  // Prevents JavaScript access
+    Secure:   isSecure,               // HTTPS only in production
+    SameSite: http.SameSiteLaxMode,   // CSRF protection
+    MaxAge:   86400,                  // 24 hours
 })
 ```
 
-**Recommendation:**
-- Add `Secure: true` flag (requires HTTPS in production)
-- Add `MaxAge` to limit session lifetime
-- Consider configurable expiration times
-
-**Impact:** Prevents cookie interception and limits session hijacking window.
+**Impact:** Prevents cookie interception via HTTPS enforcement and limits session hijacking with time-bound expiration.
 
 ---
 
