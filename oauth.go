@@ -201,7 +201,11 @@ func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowSta
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("auth server metadata request failed: %s - %s", resp.Status, string(body))
+		// Log detailed error internally for debugging/monitoring
+		fmt.Fprintf(os.Stderr, "AUTH_ERROR: Metadata request failed - URL: %s, Status: %s, Body: %s\n",
+			metadataURL, resp.Status, string(body))
+		// Return generic error to user to prevent information disclosure
+		return nil, fmt.Errorf("failed to retrieve authorization server metadata (status: %d)", resp.StatusCode)
 	}
 
 	var metadata AuthServerMetadata
@@ -382,7 +386,11 @@ func (c *Client) exchangeCodeForTokens(tokenEndpoint, code, codeVerifier string,
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("token request failed: %s - %s", resp.Status, string(body))
+		// Log detailed error internally for debugging/monitoring
+		fmt.Fprintf(os.Stderr, "TOKEN_ERROR: Token exchange failed - Status: %s, Body: %s\n",
+			resp.Status, string(body))
+		// Return generic error to user to prevent information disclosure
+		return nil, fmt.Errorf("token exchange failed (status: %d)", resp.StatusCode)
 	}
 
 	var tokens map[string]interface{}

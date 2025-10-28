@@ -118,19 +118,26 @@ http.SetCookie(w, &http.Cookie{
 
 ---
 
-### 6. Error Information Disclosure
-**Files:** Multiple locations
+### 6. Error Information Disclosure ✅ **COMPLETED**
+**Files:** [oauth.go:202-208](oauth.go#L202-L208), [oauth.go:388-393](oauth.go#L388-L393)
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
 
 **Issue:** Error messages expose internal implementation details:
-- [oauth.go:120](oauth.go#L120): `return nil, fmt.Errorf("auth server metadata request failed: %s - %s", resp.Status, string(body))`
-- [oauth.go:291](oauth.go#L291): `return nil, fmt.Errorf("token request failed: %s - %s", resp.Status, string(body))`
+- Auth server metadata request failures exposed HTTP status and response body
+- Token exchange failures exposed HTTP status and response body
+- Could leak internal server details, error messages, or system information to attackers
 
-**Recommendation:**
-- Log detailed errors internally
-- Return generic error messages to users
-- Implement error wrapping with sensitive data sanitization
+**Implementation:**
+- ✅ Added internal logging to stderr for detailed error information
+- ✅ Generic error messages returned to users (only status code included)
+- ✅ Auth metadata errors: Log full details, return generic message
+- ✅ Token exchange errors: Log full details, return generic message
+- ✅ Prefix logging with "AUTH_ERROR:" and "TOKEN_ERROR:" for easy monitoring
+- ✅ Maintains error wrapping for proper error handling
+- ✅ No breaking changes - error types remain consistent
 
-**Impact:** Prevents information leakage that could aid attackers.
+**Impact:** Prevents information leakage while maintaining debugging capability through logs.
 
 ---
 

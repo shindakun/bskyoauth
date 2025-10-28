@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed DPoP private keys remaining in memory after failed/abandoned auth flows
 - **SECURITY**: Fixed missing issuer validation allowing potential authorization code injection
 - **CRITICAL**: Fixed DPoP proof replay detection by improving JTI uniqueness with nanosecond timestamps
+- **SECURITY**: Fixed error information disclosure - sanitized error messages to prevent leaking internal details
 
 ### Technical Details
 - OAuth state entries are now wrapped in `stateEntry` struct with `expiresAt` timestamp
@@ -48,6 +49,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Security events logged to stderr for monitoring and alerting
 - DPoP JTI now generated with `generateUniqueJTI()` using nanosecond timestamp + 16 random bytes
 - Each DPoP proof guaranteed unique to prevent server-side replay detection
+- Error messages sanitized: detailed errors logged to stderr, generic messages returned to users
+- Two error locations sanitized: auth metadata requests and token exchange failures
 
 ### Migration Notes
 - This is a backwards-compatible change with no API modifications
