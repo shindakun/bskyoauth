@@ -21,8 +21,9 @@ func TestOAuthStateStoreExpiration(t *testing.T) {
 
 	// Store a state
 	testState := &internalOAuthState{
-		CodeVerifier: "test-verifier",
-		DPoPKey:      key,
+		CodeVerifier:   "test-verifier",
+		DPoPKey:        key,
+		ExpectedIssuer: "https://bsky.social",
 	}
 	store.set("test-state", testState)
 
@@ -59,8 +60,9 @@ func TestOAuthStateStoreCleanup(t *testing.T) {
 	// Store multiple states
 	for i := 0; i < 10; i++ {
 		testState := &internalOAuthState{
-			CodeVerifier: "test-verifier",
-			DPoPKey:      key,
+			CodeVerifier:   "test-verifier",
+			DPoPKey:        key,
+			ExpectedIssuer: "https://bsky.social",
 		}
 		store.set(string(rune(i)), testState)
 	}
@@ -99,8 +101,9 @@ func TestOAuthStateStoreDelete(t *testing.T) {
 
 	// Store a state
 	testState := &internalOAuthState{
-		CodeVerifier: "test-verifier",
-		DPoPKey:      key,
+		CodeVerifier:   "test-verifier",
+		DPoPKey:        key,
+		ExpectedIssuer: "https://bsky.social",
 	}
 	store.set("test-state", testState)
 
@@ -137,5 +140,33 @@ func TestOAuthStateStoreStop(t *testing.T) {
 	// Should still be marked as stopped
 	if !store.stopped {
 		t.Error("Store should still be marked as stopped after second call")
+	}
+}
+
+func TestIssuerValidation(t *testing.T) {
+	store := newOAuthStateStore(1 * time.Minute)
+	defer store.stop()
+
+	// Generate test key
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate key: %v", err)
+	}
+
+	// Store a state with expected issuer
+	testState := &internalOAuthState{
+		CodeVerifier:   "test-verifier",
+		DPoPKey:        key,
+		ExpectedIssuer: "https://bsky.social",
+	}
+	store.set("test-state", testState)
+
+	// Retrieve and verify expected issuer is stored
+	retrieved, exists := store.get("test-state")
+	if !exists {
+		t.Fatal("State should exist")
+	}
+	if retrieved.ExpectedIssuer != "https://bsky.social" {
+		t.Errorf("Expected issuer 'https://bsky.social', got '%s'", retrieved.ExpectedIssuer)
 	}
 }

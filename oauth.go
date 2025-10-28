@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +32,9 @@ var (
 
 	// ErrNoAccessToken is returned when no access token is received
 	ErrNoAccessToken = errors.New("no access token in response")
+
+	// ErrIssuerMismatch is returned when the callback issuer doesn't match the expected authorization server
+	ErrIssuerMismatch = errors.New("issuer mismatch: potential authorization code injection attack")
 )
 
 // oauthStateStore stores temporary OAuth state for PKCE and DPoP keys with TTL
@@ -49,8 +53,9 @@ type stateEntry struct {
 }
 
 type internalOAuthState struct {
-	CodeVerifier string
-	DPoPKey      interface{} // *ecdsa.PrivateKey
+	CodeVerifier   string
+	DPoPKey        interface{} // *ecdsa.PrivateKey
+	ExpectedIssuer string      // Expected authorization server for validation
 }
 
 const (
@@ -160,12 +165,6 @@ func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowSta
 	// Generate state
 	state := generateRandomString(32)
 
-	// Store OAuth state
-	globalStateStore.set(state, &internalOAuthState{
-		CodeVerifier: codeVerifier,
-		DPoPKey:      dpopKey,
-	})
-
 	// Resolve handle to DID and authorization server
 	dir := identity.DefaultDirectory()
 	atid, err := syntax.ParseAtIdentifier(handle)
@@ -184,6 +183,13 @@ func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowSta
 	if strings.Contains(authServer, "bsky.network") || strings.Contains(string(ident.DID), "bsky.social") {
 		authServer = "https://bsky.social"
 	}
+
+	// Store OAuth state with expected issuer for validation
+	globalStateStore.set(state, &internalOAuthState{
+		CodeVerifier:   codeVerifier,
+		DPoPKey:        dpopKey,
+		ExpectedIssuer: authServer,
+	})
 
 	metadataURL := authServer + "/.well-known/oauth-authorization-server"
 
@@ -237,6 +243,16 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, code, state, issuer strin
 		return nil, ErrInvalidState
 	}
 	globalStateStore.delete(state)
+
+	// Validate issuer matches expected authorization server
+	// This prevents authorization code injection attacks
+	if issuer != oauthState.ExpectedIssuer {
+		// Log security event for monitoring
+		fmt.Fprintf(os.Stderr, "SECURITY: Issuer mismatch detected - expected: %s, got: %s\n",
+			oauthState.ExpectedIssuer, issuer)
+		return nil, fmt.Errorf("%w: expected %s, got %s", ErrIssuerMismatch,
+			oauthState.ExpectedIssuer, issuer)
+	}
 
 	// Get token endpoint from issuer
 	metadataURL := issuer + "/.well-known/oauth-authorization-server"

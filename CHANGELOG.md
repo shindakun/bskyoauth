@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SECURITY**: Added reverse proxy configuration examples (nginx, Caddy)
 - Added HTTPS validation warnings in web-demo example application
 - Added security best practices section covering cookies, session storage, rate limiting
+- **SECURITY**: Added issuer validation to prevent authorization code injection attacks
+- **SECURITY**: Added `ErrIssuerMismatch` error for detecting attack attempts
+- **SECURITY**: Added security event logging for issuer mismatch detection
+- Added `ExpectedIssuer` field to OAuth state for validation during callback
 
 ### Changed
 - **SECURITY**: OAuth state entries now automatically expire after 10 minutes to prevent memory leaks
@@ -31,12 +35,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SECURITY**: Fixed memory leak where abandoned OAuth authorization flows would persist indefinitely
 - **SECURITY**: Fixed potential DoS vector from accumulating expired state entries
 - Fixed DPoP private keys remaining in memory after failed/abandoned auth flows
+- **SECURITY**: Fixed missing issuer validation allowing potential authorization code injection
 
 ### Technical Details
 - OAuth state entries are now wrapped in `stateEntry` struct with `expiresAt` timestamp
 - Cleanup goroutine runs every minute to purge expired entries
 - State validation checks expiration on retrieval, providing defense-in-depth
 - Thread-safe operations maintained with proper mutex usage
+- Issuer validation performed in `CompleteAuthFlow` before token exchange
+- Expected issuer stored during `StartAuthFlow` and validated during callback
+- Security events logged to stderr for monitoring and alerting
 
 ### Migration Notes
 - This is a backwards-compatible change with no API modifications

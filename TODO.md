@@ -98,17 +98,23 @@ http.SetCookie(w, &http.Cookie{
 
 ## High Priority Issues
 
-### 5. Missing CSRF Token Validation Enhancement
-**File:** [client.go:287-320](client.go#L287-L320)
+### 5. Missing CSRF Token Validation Enhancement ✅ **COMPLETED**
+**File:** [oauth.go:246-254](oauth.go#L246-L254)
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
 
 **Issue:** While OAuth state parameter provides CSRF protection, the callback handler doesn't validate issuer (`iss`) parameter matches expected domain.
 
-**Recommendation:**
-- Add issuer validation against expected PDS endpoints
-- Consider maintaining allowlist of valid issuers
-- Log and alert on issuer mismatch attempts
+**Implementation:**
+- ✅ Added `ExpectedIssuer` field to `internalOAuthState` struct
+- ✅ Expected issuer stored during `StartAuthFlow` based on resolved handle
+- ✅ Issuer validation performed in `CompleteAuthFlow` before token exchange
+- ✅ New `ErrIssuerMismatch` error type for attack detection
+- ✅ Security event logging to stderr for monitoring (includes expected vs actual)
+- ✅ Validation occurs before any network requests to issuer
+- ✅ Test coverage added for issuer storage and retrieval
 
-**Impact:** Prevents authorization code injection attacks.
+**Impact:** Prevents authorization code injection attacks, enables security monitoring.
 
 ---
 
