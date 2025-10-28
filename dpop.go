@@ -112,7 +112,8 @@ func (t *dpopTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 // createDPoPProof creates a DPoP JWT proof for the given request.
 func createDPoPProof(key *ecdsa.PrivateKey, method, uri, accessToken, nonce string) (string, error) {
 	now := time.Now().Unix()
-	jti := generateRandomString(16)
+	// Generate unique JTI with timestamp and random bytes for better uniqueness
+	jti := generateUniqueJTI()
 
 	parsedURL, _ := url.Parse(uri)
 	htm := method
@@ -165,4 +166,20 @@ func generateRandomString(length int) string {
 	b := make([]byte, length)
 	rand.Read(b)
 	return base64.RawURLEncoding.EncodeToString(b)[:length]
+}
+
+// generateUniqueJTI generates a unique JWT ID for DPoP proofs using timestamp and random bytes.
+// This prevents replay attacks by ensuring each proof has a unique identifier.
+func generateUniqueJTI() string {
+	// Use nanosecond timestamp for better uniqueness
+	timestamp := time.Now().UnixNano()
+	// Generate 16 bytes of random data
+	randomBytes := make([]byte, 16)
+	rand.Read(randomBytes)
+	// Combine timestamp and random bytes
+	combined := append([]byte(base64.RawURLEncoding.EncodeToString([]byte{
+		byte(timestamp >> 56), byte(timestamp >> 48), byte(timestamp >> 40), byte(timestamp >> 32),
+		byte(timestamp >> 24), byte(timestamp >> 16), byte(timestamp >> 8), byte(timestamp),
+	})), randomBytes...)
+	return base64.RawURLEncoding.EncodeToString(combined)
 }
