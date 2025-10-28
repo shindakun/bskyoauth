@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **DOCUMENTATION**: Added detailed production deployment guidelines
 - Example application now validates BASE_URL and warns when HTTPS is not used
 - **SECURITY**: Session cookies now include Secure flag when using HTTPS
-- **SECURITY**: Session cookies now have 24-hour MaxAge expiration
+- **SECURITY**: Session cookies now have 30-day MaxAge expiration
 - Logout handler now properly clears cookies with matching security attributes
 
 ### Fixed
@@ -43,8 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SECURITY**: Fixed potential DoS vector from accumulating expired state entries
 - Fixed DPoP private keys remaining in memory after failed/abandoned auth flows
 - **SECURITY**: Fixed missing issuer validation allowing potential authorization code injection
-- **CRITICAL**: Fixed DPoP proof replay detection by improving JTI uniqueness with nanosecond timestamps
+- **CRITICAL**: Fixed DPoP proof replay detection by improving JTI uniqueness
 - **SECURITY**: Fixed error information disclosure - sanitized error messages to prevent leaking internal details
+- **CRITICAL**: Fixed DPoP nonce not persisting across requests causing replay errors
 
 ### Technical Details
 - OAuth state entries are now wrapped in `stateEntry` struct with `expiresAt` timestamp
@@ -54,8 +55,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issuer validation performed in `CompleteAuthFlow` before token exchange
 - Expected issuer stored during `StartAuthFlow` and validated during callback
 - Security events logged to stderr for monitoring and alerting
-- DPoP JTI now generated with `generateUniqueJTI()` using nanosecond timestamp + 16 random bytes
-- Each DPoP proof guaranteed unique to prevent server-side replay detection
+- DPoP JTI now generated with `generateUniqueJTI()` using 24 bytes of cryptographic random data
+- Each DPoP proof guaranteed unique with 192 bits of entropy
+- DPoP nonce now persisted in Session struct and reused across requests
+- `NewDPoPTransport()` accepts nonce parameter to initialize with existing nonce
+- All client methods (CreatePost, CreateRecord, DeleteRecord) update session nonce after requests
+- Prevents "DPoP proof replayed" errors on subsequent API calls
 - Error messages sanitized: detailed errors logged to stderr, generic messages returned to users
 - Two error locations sanitized: auth metadata requests and token exchange failures
 - Rate limiting implemented using token bucket algorithm from golang.org/x/time/rate
@@ -63,7 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - IP-based rate limiting with X-Forwarded-For support for proxied requests
 - Automatic cleanup of idle rate limiters to prevent memory leaks
 - Cookie security: Secure flag automatically enabled for HTTPS deployments
-- Cookie expiration: 24-hour MaxAge prevents indefinite session lifetime
+- Cookie expiration: 30-day MaxAge prevents indefinite session lifetime
 - Cookie attributes preserved during logout for proper cookie deletion
 
 ### Migration Notes

@@ -27,7 +27,8 @@ type dpopTransport struct {
 }
 
 // NewDPoPTransport creates a new HTTP transport with DPoP support.
-func NewDPoPTransport(underlying http.RoundTripper, dpopKey *ecdsa.PrivateKey, token string) http.RoundTripper {
+// The nonce parameter allows reusing a previously obtained nonce to avoid replay errors.
+func NewDPoPTransport(underlying http.RoundTripper, dpopKey *ecdsa.PrivateKey, token string, nonce string) http.RoundTripper {
 	if underlying == nil {
 		underlying = http.DefaultTransport
 	}
@@ -35,7 +36,15 @@ func NewDPoPTransport(underlying http.RoundTripper, dpopKey *ecdsa.PrivateKey, t
 		underlying: underlying,
 		dpopKey:    dpopKey,
 		token:      token,
+		nonce:      nonce,
 	}
+}
+
+// GetNonce returns the current DPoP nonce.
+func (t *dpopTransport) GetNonce() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.nonce
 }
 
 // RoundTrip implements http.RoundTripper with DPoP proof generation and nonce handling.
@@ -171,15 +180,9 @@ func generateRandomString(length int) string {
 // generateUniqueJTI generates a unique JWT ID for DPoP proofs using timestamp and random bytes.
 // This prevents replay attacks by ensuring each proof has a unique identifier.
 func generateUniqueJTI() string {
-	// Use nanosecond timestamp for better uniqueness
-	timestamp := time.Now().UnixNano()
-	// Generate 16 bytes of random data
-	randomBytes := make([]byte, 16)
+	// Generate 24 bytes of cryptographically secure random data
+	// This provides 192 bits of entropy, making collisions astronomically unlikely
+	randomBytes := make([]byte, 24)
 	rand.Read(randomBytes)
-	// Combine timestamp and random bytes
-	combined := append([]byte(base64.RawURLEncoding.EncodeToString([]byte{
-		byte(timestamp >> 56), byte(timestamp >> 48), byte(timestamp >> 40), byte(timestamp >> 32),
-		byte(timestamp >> 24), byte(timestamp >> 16), byte(timestamp >> 8), byte(timestamp),
-	})), randomBytes...)
-	return base64.RawURLEncoding.EncodeToString(combined)
+	return base64.RawURLEncoding.EncodeToString(randomBytes)
 }

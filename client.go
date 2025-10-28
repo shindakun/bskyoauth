@@ -113,9 +113,10 @@ func (c *Client) CreatePost(ctx context.Context, session *Session, text string) 
 
 	pdsHost := ident.PDSEndpoint()
 
-	// Create HTTP client with DPoP transport
+	// Create HTTP client with DPoP transport, reusing the session's nonce
+	transport := NewDPoPTransport(http.DefaultTransport, session.DPoPKey, session.AccessToken, session.DPoPNonce)
 	httpClient := &http.Client{
-		Transport: NewDPoPTransport(http.DefaultTransport, session.DPoPKey, session.AccessToken),
+		Transport: transport,
 	}
 
 	client := &xrpc.Client{
@@ -140,6 +141,12 @@ func (c *Client) CreatePost(ctx context.Context, session *Session, text string) 
 	}
 
 	_, err = atproto.RepoCreateRecord(ctx, client, input)
+
+	// Update session with the latest nonce
+	if dpopTransport, ok := transport.(*dpopTransport); ok {
+		session.DPoPNonce = dpopTransport.GetNonce()
+	}
+
 	return err
 }
 
@@ -165,9 +172,10 @@ func (c *Client) CreateRecord(ctx context.Context, session *Session, collection 
 
 	pdsHost := ident.PDSEndpoint()
 
-	// Create HTTP client with DPoP transport
+	// Create HTTP client with DPoP transport, reusing the session's nonce
+	transport := NewDPoPTransport(http.DefaultTransport, session.DPoPKey, session.AccessToken, session.DPoPNonce)
 	httpClient := &http.Client{
-		Transport: NewDPoPTransport(http.DefaultTransport, session.DPoPKey, session.AccessToken),
+		Transport: transport,
 	}
 
 	xrpcClient := &xrpc.Client{
@@ -190,6 +198,12 @@ func (c *Client) CreateRecord(ctx context.Context, session *Session, collection 
 	}
 
 	err = xrpcClient.Do(ctx, xrpc.Procedure, "application/json", "com.atproto.repo.createRecord", nil, input, &output)
+
+	// Update session with the latest nonce
+	if dpopTransport, ok := transport.(*dpopTransport); ok {
+		session.DPoPNonce = dpopTransport.GetNonce()
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -217,9 +231,10 @@ func (c *Client) DeleteRecord(ctx context.Context, session *Session, collection,
 
 	pdsHost := ident.PDSEndpoint()
 
-	// Create HTTP client with DPoP transport
+	// Create HTTP client with DPoP transport, reusing the session's nonce
+	transport := NewDPoPTransport(http.DefaultTransport, session.DPoPKey, session.AccessToken, session.DPoPNonce)
 	httpClient := &http.Client{
-		Transport: NewDPoPTransport(http.DefaultTransport, session.DPoPKey, session.AccessToken),
+		Transport: transport,
 	}
 
 	client := &xrpc.Client{
@@ -235,6 +250,12 @@ func (c *Client) DeleteRecord(ctx context.Context, session *Session, collection,
 	}
 
 	_, err = atproto.RepoDeleteRecord(ctx, client, input)
+
+	// Update session with the latest nonce
+	if dpopTransport, ok := transport.(*dpopTransport); ok {
+		session.DPoPNonce = dpopTransport.GetNonce()
+	}
+
 	return err
 }
 

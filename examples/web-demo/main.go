@@ -150,7 +150,7 @@ func callbackSuccessHandler(w http.ResponseWriter, r *http.Request, sessionID st
 		HttpOnly: true,                  // Prevents JavaScript access
 		Secure:   isSecure,               // HTTPS only in production
 		SameSite: http.SameSiteLaxMode,   // CSRF protection
-		MaxAge:   86400,                  // 24 hours (configurable)
+		MaxAge:   2592000,                // 30 days (configurable)
 	})
 
 	http.Redirect(w, r, "/", http.StatusFound)
