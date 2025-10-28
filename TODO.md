@@ -42,21 +42,28 @@ http.SetCookie(w, &http.Cookie{
 
 ---
 
-### 2. In-Memory Session Store Lacks Expiration
-**File:** [types.go:60-101](types.go#L60-L101)
+### 2. In-Memory Session Store Lacks Expiration ✅ **COMPLETED**
+**File:** [types.go:61-185](types.go#L61-L185)
 
-**Issue:** MemorySessionStore has no automatic cleanup or TTL mechanism. Sessions persist indefinitely, causing:
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+
+**Issue:** MemorySessionStore had no automatic cleanup or TTL mechanism. Sessions persisted indefinitely, causing:
 - Memory leaks in long-running applications
 - Increased attack surface for stolen sessions
 - No automatic session invalidation
 
-**Recommendation:**
-- Implement TTL (time-to-live) mechanism with automatic cleanup
-- Add session expiration timestamps
-- Provide periodic cleanup goroutine
-- Consider implementing sliding expiration
+**Implementation:**
+- ✅ Added 30-day TTL for sessions (configurable, matches cookie MaxAge)
+- ✅ Implemented automatic cleanup goroutine (runs every 5 minutes)
+- ✅ Added expiration validation on retrieval (defense-in-depth)
+- ✅ Created `sessionEntry` wrapper with `expiresAt` timestamp
+- ✅ Added `NewMemorySessionStoreWithTTL()` for custom TTL configuration
+- ✅ Added `Stop()` method for graceful shutdown
+- ✅ Comprehensive test coverage added (7 new tests)
+- ✅ Thread-safe with proper RWMutex usage
+- ✅ Documentation added to README.md with examples
 
-**Impact:** Prevents memory exhaustion and limits session hijacking window.
+**Impact:** Memory leaks prevented, session hijacking window limited to 30 days (configurable), proper resource management in long-running applications.
 
 ---
 

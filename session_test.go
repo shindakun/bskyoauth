@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"sync"
 	"testing"
+	"time"
 )
 
 // TestGenerateSessionID verifies that session IDs are generated correctly.
@@ -488,4 +489,224 @@ func TestMemorySessionStoreStressTest(t *testing.T) {
 	}
 
 	t.Logf("Stress test completed: %d operations", operations)
+}
+
+// TestMemorySessionStoreExpiration verifies sessions expire after TTL.
+func TestMemorySessionStoreExpiration(t *testing.T) {
+	// Create store with 200ms TTL
+	store := NewMemorySessionStoreWithTTL(200*time.Millisecond, 1*time.Minute)
+	defer store.Stop()
+
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	sessionID := "test-expiration"
+	session := &Session{
+		DID:         "did:plc:expire-test",
+		AccessToken: "token",
+		DPoPKey:     key,
+	}
+
+	// Store session
+	err := store.Set(sessionID, session)
+	if err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
+
+	// Should be retrievable immediately
+	retrieved, err := store.Get(sessionID)
+	if err != nil {
+		t.Fatalf("Get before expiration failed: %v", err)
+	}
+	if retrieved.DID != session.DID {
+		t.Error("Retrieved session doesn't match")
+	}
+
+	// Wait for expiration
+	time.Sleep(250 * time.Millisecond)
+
+	// Should now return ErrSessionNotFound
+	_, err = store.Get(sessionID)
+	if err != ErrSessionNotFound {
+		t.Errorf("Expected ErrSessionNotFound after expiration, got %v", err)
+	}
+}
+
+// TestMemorySessionStoreCleanup verifies automatic cleanup of expired sessions.
+func TestMemorySessionStoreCleanup(t *testing.T) {
+	// Create store with 100ms TTL and 50ms cleanup interval
+	store := NewMemorySessionStoreWithTTL(100*time.Millisecond, 50*time.Millisecond)
+	defer store.Stop()
+
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+
+	// Store 5 sessions
+	for i := 0; i < 5; i++ {
+		sessionID := GenerateSessionID()
+		session := &Session{
+			DID:         "did:plc:cleanup" + string(rune(i)),
+			AccessToken: "token",
+			DPoPKey:     key,
+		}
+		store.Set(sessionID, session)
+	}
+
+	// Verify sessions exist
+	store.mu.RLock()
+	initialCount := len(store.sessions)
+	store.mu.RUnlock()
+
+	if initialCount != 5 {
+		t.Errorf("Expected 5 sessions, got %d", initialCount)
+	}
+
+	// Wait for expiration and cleanup (100ms + 50ms + buffer)
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify sessions were cleaned up
+	store.mu.RLock()
+	afterCleanup := len(store.sessions)
+	store.mu.RUnlock()
+
+	if afterCleanup != 0 {
+		t.Errorf("Expected 0 sessions after cleanup, got %d", afterCleanup)
+	}
+}
+
+// TestMemorySessionStoreStop verifies Stop() terminates cleanup goroutine.
+func TestMemorySessionStoreStop(t *testing.T) {
+	store := NewMemorySessionStoreWithTTL(1*time.Hour, 100*time.Millisecond)
+
+	// Stop the store
+	store.Stop()
+
+	// Verify stopped flag is set
+	store.mu.RLock()
+	stopped := store.stopped
+	store.mu.RUnlock()
+
+	if !stopped {
+		t.Error("Store should be marked as stopped")
+	}
+
+	// Calling Stop again should be safe
+	store.Stop()
+}
+
+// TestMemorySessionStoreCustomTTL verifies custom TTL is respected.
+func TestMemorySessionStoreCustomTTL(t *testing.T) {
+	customTTL := 500 * time.Millisecond
+	store := NewMemorySessionStoreWithTTL(customTTL, 1*time.Minute)
+	defer store.Stop()
+
+	if store.ttl != customTTL {
+		t.Errorf("Expected TTL %v, got %v", customTTL, store.ttl)
+	}
+
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	sessionID := "test-custom-ttl"
+	session := &Session{
+		DID:         "did:plc:custom-ttl",
+		AccessToken: "token",
+		DPoPKey:     key,
+	}
+
+	store.Set(sessionID, session)
+
+	// Should be valid before TTL
+	time.Sleep(300 * time.Millisecond)
+	_, err := store.Get(sessionID)
+	if err != nil {
+		t.Errorf("Session should still be valid at 300ms: %v", err)
+	}
+
+	// Should be expired after TTL
+	time.Sleep(300 * time.Millisecond) // Total: 600ms > 500ms TTL
+	_, err = store.Get(sessionID)
+	if err != ErrSessionNotFound {
+		t.Errorf("Expected ErrSessionNotFound after TTL, got %v", err)
+	}
+}
+
+// TestMemorySessionStoreDefaultTTL verifies default 30-day TTL.
+func TestMemorySessionStoreDefaultTTL(t *testing.T) {
+	store := NewMemorySessionStore()
+	defer store.Stop()
+
+	expectedTTL := 30 * 24 * time.Hour
+	if store.ttl != expectedTTL {
+		t.Errorf("Expected default TTL of 30 days, got %v", store.ttl)
+	}
+
+	expectedCleanup := 5 * time.Minute
+	if store.cleanupInterval != expectedCleanup {
+		t.Errorf("Expected default cleanup interval of 5 minutes, got %v", store.cleanupInterval)
+	}
+}
+
+// TestMemorySessionStoreConcurrentExpiration verifies thread-safe cleanup.
+func TestMemorySessionStoreConcurrentExpiration(t *testing.T) {
+	store := NewMemorySessionStoreWithTTL(100*time.Millisecond, 50*time.Millisecond)
+	defer store.Stop()
+
+	var wg sync.WaitGroup
+	goroutines := 10
+
+	// Concurrent writes
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(id int) {
+			defer wg.Done()
+			key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			for j := 0; j < 10; j++ {
+				sessionID := GenerateSessionID()
+				session := &Session{
+					DID:         "did:plc:concurrent" + string(rune(id)) + string(rune(j)),
+					AccessToken: "token",
+					DPoPKey:     key,
+				}
+				store.Set(sessionID, session)
+				time.Sleep(5 * time.Millisecond)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Wait for cleanup to process
+	time.Sleep(200 * time.Millisecond)
+
+	t.Log("Concurrent expiration test completed successfully")
+}
+
+// TestMemorySessionStoreExpirationOnGet verifies expired sessions return error on Get.
+func TestMemorySessionStoreExpirationOnGet(t *testing.T) {
+	store := NewMemorySessionStoreWithTTL(100*time.Millisecond, 10*time.Minute)
+	defer store.Stop()
+
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	sessionID := "test-get-expiration"
+	session := &Session{
+		DID:         "did:plc:get-expire",
+		AccessToken: "token",
+		DPoPKey:     key,
+	}
+
+	store.Set(sessionID, session)
+
+	// Wait for expiration (but before cleanup runs)
+	time.Sleep(150 * time.Millisecond)
+
+	// Get should detect expiration even if cleanup hasn't run yet
+	_, err := store.Get(sessionID)
+	if err != ErrSessionNotFound {
+		t.Errorf("Expected ErrSessionNotFound on Get of expired session, got %v", err)
+	}
+
+	// Session should still be in map (cleanup hasn't run)
+	store.mu.RLock()
+	_, exists := store.sessions[sessionID]
+	store.mu.RUnlock()
+
+	if !exists {
+		t.Error("Expired session should still be in map before cleanup")
+	}
 }

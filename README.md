@@ -150,6 +150,55 @@ func (r *RedisSessionStore) Delete(sessionID string) error {
 }
 ```
 
+### Session Expiration and Cleanup
+
+The built-in `MemorySessionStore` automatically expires sessions after **30 days** (matching cookie lifetime) and cleans them up every 5 minutes. This prevents:
+- Memory leaks in long-running applications
+- Extended exposure from stolen sessions
+- Unbounded memory growth
+
+**Custom Session Lifetime:**
+
+```go
+// 7-day sessions
+store := bskyoauth.NewMemorySessionStoreWithTTL(
+    7*24*time.Hour,  // TTL: 7 days
+    1*time.Hour,     // Cleanup interval
+)
+
+client := bskyoauth.NewClientWithOptions(bskyoauth.ClientOptions{
+    BaseURL:      "https://example.com",
+    SessionStore: store,
+})
+```
+
+**⚠️ Important: Synchronize Cookie and Session TTL**
+
+When customizing session lifetime, ensure your cookie `MaxAge` matches:
+
+```go
+sessionTTL := 7 * 24 * time.Hour
+
+// Configure session store
+store := bskyoauth.NewMemorySessionStoreWithTTL(sessionTTL, 1*time.Hour)
+
+// Configure cookie to match
+http.SetCookie(w, &http.Cookie{
+    Name:     "session_id",
+    Value:    sessionID,
+    MaxAge:   int(sessionTTL.Seconds()),  // Must match session TTL
+    HttpOnly: true,
+    Secure:   true,
+    SameSite: http.SameSiteLaxMode,
+})
+```
+
+**Graceful Shutdown:**
+
+```go
+defer store.Stop()  // Stop cleanup goroutine when shutting down
+```
+
 ## Example Application
 
 A complete web application example is available in [examples/web-demo](examples/web-demo/main.go).

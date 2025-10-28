@@ -34,8 +34,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added 16 test cases covering client initialization, metadata, session management, and edge cases
 - Added comprehensive test suite for DPoP functionality (dpop_test.go)
 - Added 22 test cases covering key generation, proof creation, JWT structure, transport, and nonce handling
+- **SECURITY**: Added session expiration and automatic cleanup to MemorySessionStore
+- Added `NewMemorySessionStoreWithTTL()` for custom session lifetimes
+- Added `Stop()` method for graceful cleanup goroutine shutdown
+- Added 7 test cases for session expiration, cleanup, and TTL configuration
 
 ### Changed
+- **SECURITY**: Sessions now automatically expire after 30 days (matches cookie MaxAge, configurable)
+- **SECURITY**: MemorySessionStore enhanced with TTL tracking and automatic cleanup
+- Session cleanup goroutine runs every 5 minutes to remove expired sessions
+- `Get()` validates expiration before returning sessions (defense-in-depth)
+- Internal session storage uses `sessionEntry` wrapper with expiration timestamps
 - **SECURITY**: OAuth state entries now automatically expire after 10 minutes to prevent memory leaks
 - Internal `oauthStateStore` structure enhanced with TTL tracking and expiration timestamps
 - State store `get()` method now validates expiration before returning entries
@@ -56,8 +65,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CRITICAL**: Fixed DPoP nonce not persisting across requests causing replay errors
 
 ### Technical Details
+- **Session expiration:** Default 30-day TTL (2,592,000 seconds) matches cookie MaxAge
+- Sessions wrapped in `sessionEntry` struct with `expiresAt` timestamp
+- Session cleanup goroutine runs every 5 minutes (configurable)
+- Session expiration validated on `Get()` and during cleanup (defense-in-depth)
+- Expired sessions treated as `ErrSessionNotFound`
+- `NewMemorySessionStoreWithTTL()` allows custom TTL and cleanup intervals
+- `Stop()` method gracefully shuts down cleanup goroutine
+- Thread-safe with proper RWMutex usage for concurrent access
 - OAuth state entries are now wrapped in `stateEntry` struct with `expiresAt` timestamp
-- Cleanup goroutine runs every minute to purge expired entries
+- OAuth cleanup goroutine runs every minute to purge expired entries
 - State validation checks expiration on retrieval, providing defense-in-depth
 - Thread-safe operations maintained with proper mutex usage
 - Issuer validation performed in `CompleteAuthFlow` before token exchange
