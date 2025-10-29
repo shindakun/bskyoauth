@@ -29,6 +29,8 @@ For contributors, install the pre-commit hooks for automatic security checks:
 ```
 
 This installs a git hook that runs before each commit:
+- `gofmt` - Code formatting check
+- `golangci-lint` - Code quality and style (20+ linters)
 - `govulncheck` - Vulnerability scanning
 - `go test -race` - Tests with race detection
 - `go mod verify` - Dependency verification

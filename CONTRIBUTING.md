@@ -19,6 +19,7 @@ Thank you for your interest in contributing to bskyoauth! This document provides
    ```bash
    go mod download
    go install golang.org/x/vuln/cmd/govulncheck@latest
+   go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
    ```
 
 4. **Install pre-commit hooks (recommended):**
@@ -27,6 +28,8 @@ Thank you for your interest in contributing to bskyoauth! This document provides
    ```
 
    This installs git hooks that automatically run before each commit:
+   - `gofmt` - Code formatting check
+   - `golangci-lint` - Code quality and style (20+ linters)
    - `govulncheck` - Vulnerability scanning
    - `go test -race` - Tests with race detection
    - `go mod verify` - Dependency verification
