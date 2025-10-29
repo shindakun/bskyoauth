@@ -34,7 +34,6 @@ Thumbs.db
 
 # Demo executables
 examples/web-demo/web-demo
-examples/custom-record/custom-record
 
 # Environment files
 .env
