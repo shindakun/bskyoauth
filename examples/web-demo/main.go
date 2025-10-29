@@ -75,6 +75,38 @@ func main() {
 	log.Fatal(http.ListenAndServe(":8181", handler))
 }
 
+// checkAndRefreshToken checks if the access token is expired and refreshes it if needed.
+// Returns the (potentially refreshed) session and any error.
+func checkAndRefreshToken(client *bskyoauth.Client, sessionID string, session *bskyoauth.Session, r *http.Request) (*bskyoauth.Session, error) {
+	// Check if token will expire in the next 5 minutes
+	if session.IsAccessTokenExpired(5 * time.Minute) {
+		log.Printf("Access token expired or expiring soon, attempting refresh for session: %s", sessionID)
+
+		// Add request ID for logging correlation
+		requestID := bskyoauth.GenerateRequestID()
+		ctx := bskyoauth.WithRequestID(r.Context(), requestID)
+
+		// Attempt to refresh the token
+		newSession, err := client.RefreshToken(ctx, session)
+		if err != nil {
+			log.Printf("[%s] Token refresh failed: %v", requestID, err)
+			return nil, err
+		}
+
+		// Update session in store
+		err = client.UpdateSession(sessionID, newSession)
+		if err != nil {
+			log.Printf("[%s] Failed to update session after refresh: %v", requestID, err)
+			return nil, err
+		}
+
+		log.Printf("[%s] Token refresh successful for session: %s", requestID, sessionID)
+		return newSession, nil
+	}
+
+	return session, nil
+}
+
 func homeHandler(client *bskyoauth.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID, err := r.Cookie("session_id")
@@ -200,6 +232,15 @@ func postHandler(client *bskyoauth.Client) http.HandlerFunc {
 			return
 		}
 
+		// Check and refresh token if needed
+		session, err = checkAndRefreshToken(client, sessionID.Value, session, r)
+		if err != nil {
+			// Refresh failed - redirect to login
+			log.Printf("Token refresh failed, redirecting to login: %v", err)
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+
 		text := r.FormValue("text")
 		if text == "" {
 			http.Error(w, "Text is required", http.StatusBadRequest)
@@ -236,6 +277,15 @@ func createRecordHandler(client *bskyoauth.Client) http.HandlerFunc {
 
 		session, err := client.GetSession(sessionID.Value)
 		if err != nil || session == nil {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+
+		// Check and refresh token if needed
+		session, err = checkAndRefreshToken(client, sessionID.Value, session, r)
+		if err != nil {
+			// Refresh failed - redirect to login
+			log.Printf("Token refresh failed, redirecting to login: %v", err)
 			http.Redirect(w, r, "/", http.StatusFound)
 			return
 		}
@@ -283,6 +333,15 @@ func deleteRecordHandler(client *bskyoauth.Client) http.HandlerFunc {
 
 		session, err := client.GetSession(sessionID.Value)
 		if err != nil || session == nil {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+
+		// Check and refresh token if needed
+		session, err = checkAndRefreshToken(client, sessionID.Value, session, r)
+		if err != nil {
+			// Refresh failed - redirect to login
+			log.Printf("Token refresh failed, redirecting to login: %v", err)
 			http.Redirect(w, r, "/", http.StatusFound)
 			return
 		}
