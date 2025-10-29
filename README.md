@@ -246,6 +246,66 @@ For local development on `localhost`, HTTP is acceptable. For any production or 
 - Secure session ID generation (cryptographically random)
 - OAuth state expiration (10-minute TTL) with automatic cleanup
 - Issuer validation to prevent authorization code injection attacks
+- Comprehensive input validation to prevent injection attacks and resource exhaustion
+
+### Input Validation
+
+The library performs comprehensive input validation to prevent errors and security issues:
+
+- **Handles**: Validated against AT Protocol handle specification
+  - Maximum 253 characters total
+  - Each segment maximum 63 characters
+  - Only lowercase letters, digits, and hyphens allowed
+  - Proper format enforcement (no trailing dots, TLD cannot start with digit)
+
+- **Post Text**: Limited to 300 characters per AT Protocol spec
+  - UTF-8 validation
+  - Null byte rejection
+  - Whitespace-only text rejection
+
+- **Custom Records**: Field-level validation with configurable limits
+  - Text field validation up to 1000 characters (configurable)
+  - DateTime format validation
+  - Deep nesting prevention (max 10 levels)
+
+- **Collection Names**: Must be valid NSIDs (e.g., "app.bsky.feed.post")
+
+All validation errors return descriptive error messages for debugging.
+
+#### Using Validation Functions
+
+Validation functions are exported and can be called directly:
+
+```go
+// Validate a handle
+if err := bskyoauth.ValidateHandle("alice.bsky.social"); err != nil {
+    log.Printf("Invalid handle: %v", err)
+}
+
+// Validate post text
+if err := bskyoauth.ValidatePostText("Hello, world!"); err != nil {
+    log.Printf("Invalid post text: %v", err)
+}
+
+// Validate a custom text field with custom limit
+if err := bskyoauth.ValidateTextField(description, "description", 500); err != nil {
+    log.Printf("Invalid field: %v", err)
+}
+
+// Validate record fields
+record := map[string]interface{}{
+    "text":      "My post",
+    "createdAt": "2025-01-15T12:00:00.000Z",
+}
+if err := bskyoauth.ValidateRecordFields(record); err != nil {
+    log.Printf("Invalid record: %v", err)
+}
+
+// Validate collection NSID
+if err := bskyoauth.ValidateCollectionNSID("app.bsky.feed.post"); err != nil {
+    log.Printf("Invalid collection: %v", err)
+}
+```
 
 ### Access Token Handling
 

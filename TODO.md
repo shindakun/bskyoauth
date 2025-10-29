@@ -45,36 +45,6 @@ Per the [AT Protocol OAuth specification](https://atproto.com/specs/oauth), **ac
 
 ## Medium Priority Issues
 
-### 9. Missing Input Validation and Sanitization
-**File:** [client.go:268-272](client.go#L268-L272), [examples/web-demo/main.go:179](examples/web-demo/main.go#L179)
-
-**Status:** PLANNING - See [IMPLEMENTATION_PLAN_ISSUE9.md](IMPLEMENTATION_PLAN_ISSUE9.md) for detailed plan
-
-**Issue:** Limited validation on user inputs:
-- Handle validation is minimal
-- Post text has no length limits
-- Custom record data not validated
-
-**Recommendation:**
-- Add comprehensive input validation
-- Enforce length limits on text fields
-- Sanitize HTML/special characters if displayed
-- Validate handle format before API calls
-- Add schema validation for custom records
-
-**Implementation Plan:**
-- Create validation.go module with centralized validation functions
-- Leverage AT Protocol syntax package for handle/NSID validation
-- Enforce 300 character limit for posts per AT Protocol spec
-- Add 30+ comprehensive validation tests
-- Update client.go and web-demo to use validation
-- See [IMPLEMENTATION_PLAN_ISSUE9.md](IMPLEMENTATION_PLAN_ISSUE9.md) for full details
-- **NOTE:** Remove IMPLEMENTATION_PLAN_ISSUE9.md when implementation is completed
-
-**Impact:** Prevents injection attacks and resource exhaustion.
-
----
-
 ### 10. Missing Security Headers
 **File:** [examples/web-demo/main.go](examples/web-demo/main.go)
 
@@ -481,3 +451,62 @@ http.SetCookie(w, &http.Cookie{
 - ✅ Periodic cleanup every 5 minutes
 
 **Impact:** Prevents brute force, enumeration, and DoS attacks on sensitive endpoints.
+
+---
+
+### 9. Missing Input Validation and Sanitization ✅ **COMPLETED**
+**File:** [validation.go](validation.go), [client.go:103-104](client.go#L103-L104), [client.go:167-174](client.go#L167-L174), [examples/web-demo/main.go:185-188](examples/web-demo/main.go#L185-L188)
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+
+**Issue:** Limited validation on user inputs:
+- Handle validation is minimal
+- Post text has no length limits
+- Custom record data not validated
+
+**Implementation:**
+- ✅ Created comprehensive validation.go module with centralized validation functions
+- ✅ Added `ValidateHandle()` to validate handles per AT Protocol spec (max 253 chars, proper format)
+- ✅ Added `ValidatePostText()` to validate post text (max 300 chars per AT Protocol spec)
+- ✅ Added `ValidateTextField()` for generic text field validation with configurable limits
+- ✅ Added `ValidateRecordFields()` for record structure validation
+- ✅ Added `ValidateCollectionNSID()` for collection name validation
+- ✅ Leverages AT Protocol syntax package from indigo for spec-compliant validation
+- ✅ UTF-8 validation and null byte rejection
+- ✅ Deep nesting prevention (max 10 levels) to prevent memory exhaustion
+- ✅ Comprehensive error types: ErrHandleInvalid, ErrTextTooLong, ErrInvalidUTF8, etc.
+- ✅ Created validation_test.go with 36 comprehensive test cases
+- ✅ Updated `LoginHandler` to validate handle format before OAuth flow
+- ✅ Updated `CreatePost` to validate text before API call
+- ✅ Updated `CreateRecord` to validate collection NSID and record fields
+- ✅ Updated web-demo `postHandler` to validate post text client-side
+- ✅ Updated web-demo `createOngakuHandler` to validate text field (1000 char limit)
+- ✅ All validation functions exported for use by library consumers
+- ✅ Comprehensive README documentation with usage examples
+- ✅ Test count increased from 127 to 193 tests (66 new validation tests)
+
+**Validation Features:**
+- **Handles**: Max 253 chars, segments max 63 chars, valid characters (a-z, 0-9, hyphen)
+- **Post Text**: Max 300 chars (AT Protocol spec), UTF-8 validated, no null bytes
+- **Custom Records**: Configurable limits, datetime validation, nesting prevention
+- **Collection NSIDs**: Validated using AT Protocol syntax package
+
+**Example Usage:**
+```go
+// Validate handle
+if err := bskyoauth.ValidateHandle("alice.bsky.social"); err != nil {
+    return err
+}
+
+// Validate post text
+if err := bskyoauth.ValidatePostText("Hello, world!"); err != nil {
+    return err
+}
+
+// Validate custom field
+if err := bskyoauth.ValidateTextField(text, "description", 500); err != nil {
+    return err
+}
+```
+
+**Impact:** Prevents injection attacks, resource exhaustion, and API errors. Provides early validation with clear error messages.

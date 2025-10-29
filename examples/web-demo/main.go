@@ -181,6 +181,12 @@ func postHandler(client *bskyoauth.Client) http.HandlerFunc {
 			return
 		}
 
+		// Validate post text
+		if err := bskyoauth.ValidatePostText(text); err != nil {
+			http.Error(w, fmt.Sprintf("Invalid post text: %v", err), http.StatusBadRequest)
+			return
+		}
+
 		if err := client.CreatePost(r.Context(), session, text); err != nil {
 			http.Error(w, "Failed to create post: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -212,6 +218,12 @@ func createOngakuHandler(client *bskyoauth.Client) http.HandlerFunc {
 		text := r.FormValue("text")
 		if text == "" {
 			http.Error(w, "Text is required", http.StatusBadRequest)
+			return
+		}
+
+		// Validate text field (custom records can have larger limits)
+		if err := bskyoauth.ValidateTextField(text, "text", 1000); err != nil {
+			http.Error(w, fmt.Sprintf("Invalid text: %v", err), http.StatusBadRequest)
 			return
 		}
 

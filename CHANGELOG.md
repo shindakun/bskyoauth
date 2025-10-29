@@ -13,6 +13,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive JWT validation module (jwt.go) remains available for future use or custom implementations
 - JWT test suite (jwt_test.go) provides examples of token validation if needed
 - OAuth state store now includes automatic expiration and cleanup mechanism
+- **SECURITY**: Added comprehensive input validation module (validation.go)
+  - Handle format validation using AT Protocol syntax package
+  - Post text length validation (300 character limit per AT Protocol spec)
+  - Generic text field validation with configurable limits
+  - Record field validation for custom records
+  - Collection NSID validation
+  - 36 validation test cases covering handles, text, records, and NSIDs
+- Added `ValidateHandle()` function to validate Bluesky handles per AT Protocol spec
+- Added `ValidatePostText()` function to validate post text (max 300 chars, UTF-8, no null bytes)
+- Added `ValidateTextField()` function for custom text field validation with configurable limits
+- Added `ValidateRecordFields()` function to validate record structures and common fields
+- Added `ValidateCollectionNSID()` function to validate collection names
+- Added comprehensive validation error types (ErrHandleInvalid, ErrTextTooLong, etc.)
 
 ### Changed
 - **IMPORTANT**: Removed automatic JWT signature validation to comply with AT Protocol OAuth spec
@@ -60,10 +73,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **DOCUMENTATION**: Expanded Security section in README with prominent HTTPS warnings
 - **DOCUMENTATION**: Added detailed production deployment guidelines
 - **DOCUMENTATION**: Added dedicated JWT Token Validation section in README
+- **DOCUMENTATION**: Added comprehensive Input Validation section to README with usage examples
 - Example application now validates BASE_URL and warns when HTTPS is not used
 - **SECURITY**: Session cookies now include Secure flag when using HTTPS
 - **SECURITY**: Session cookies now have 30-day MaxAge expiration
 - Logout handler now properly clears cookies with matching security attributes
+- **SECURITY**: `LoginHandler` now validates handle format before starting OAuth flow
+- **SECURITY**: `CreatePost` now validates text length and content before API call
+- **SECURITY**: `CreateRecord` now validates collection NSID and record fields before API call
+- **SECURITY**: Web-demo `postHandler` now validates post text client-side
+- **SECURITY**: Web-demo `createOngakuHandler` now validates text field with 1000 char limit
 
 ### Fixed
 - **SECURITY**: Fixed memory leak where abandoned OAuth authorization flows would persist indefinitely
@@ -109,6 +128,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cookie security: Secure flag automatically enabled for HTTPS deployments
 - Cookie expiration: 30-day MaxAge prevents indefinite session lifetime
 - Cookie attributes preserved during logout for proper cookie deletion
+- **Input validation:** Handles validated per AT Protocol spec (max 253 chars, proper format)
+- **Input validation:** Post text validated per AT Protocol spec (max 300 chars, UTF-8, no null bytes)
+- **Input validation:** Custom records validated with deep nesting prevention (max 10 levels)
+- **Input validation:** Collection NSIDs validated using AT Protocol syntax package
+- **Input validation:** All validation errors return descriptive messages for debugging
+- Validation functions exported for use by library consumers
+- Test count increased from 127 to 193 tests (66 new validation tests added)
 
 ### Migration Notes
 - This is a backwards-compatible change with no API modifications

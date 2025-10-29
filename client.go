@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -99,6 +100,11 @@ func (c *Client) CreatePost(ctx context.Context, session *Session, text string) 
 		return ErrNoSession
 	}
 
+	// Validate post text
+	if err := ValidatePostText(text); err != nil {
+		return fmt.Errorf("invalid post text: %w", err)
+	}
+
 	// Get the actual PDS endpoint for this user
 	dir := identity.DefaultDirectory()
 	atid, err := syntax.ParseAtIdentifier(session.DID)
@@ -156,6 +162,16 @@ func (c *Client) CreatePost(ctx context.Context, session *Session, text string) 
 func (c *Client) CreateRecord(ctx context.Context, session *Session, collection string, record map[string]interface{}) (*atproto.RepoCreateRecord_Output, error) {
 	if session == nil || session.AccessToken == "" {
 		return nil, ErrNoSession
+	}
+
+	// Validate collection NSID
+	if err := ValidateCollectionNSID(collection); err != nil {
+		return nil, fmt.Errorf("invalid collection: %w", err)
+	}
+
+	// Validate record fields
+	if err := ValidateRecordFields(record); err != nil {
+		return nil, fmt.Errorf("invalid record: %w", err)
 	}
 
 	// Get the actual PDS endpoint for this user
@@ -289,6 +305,12 @@ func (c *Client) LoginHandler() http.HandlerFunc {
 		handle := r.URL.Query().Get("handle")
 		if handle == "" {
 			http.Error(w, "handle parameter required", http.StatusBadRequest)
+			return
+		}
+
+		// Validate handle format
+		if err := ValidateHandle(handle); err != nil {
+			http.Error(w, fmt.Sprintf("invalid handle: %v", err), http.StatusBadRequest)
 			return
 		}
 
