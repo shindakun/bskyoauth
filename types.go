@@ -2,8 +2,57 @@ package bskyoauth
 
 import (
 	"crypto/ecdsa"
+	"net/http"
 	"time"
 )
+
+// Client is the main entry point for the Bluesky OAuth library.
+// It manages OAuth flows, session storage, and API interactions.
+type Client struct {
+	// BaseURL is the base URL of the OAuth client (e.g., "http://localhost:8181")
+	BaseURL string
+
+	// ClientID is the OAuth client identifier (typically BaseURL + "/client-metadata.json")
+	ClientID string
+
+	// RedirectURI is where the OAuth provider redirects after authorization
+	RedirectURI string
+
+	// ClientName is the display name for the OAuth client
+	ClientName string
+
+	// ApplicationType is the type of OAuth client ("web" or "native")
+	ApplicationType string
+
+	// Scopes are the OAuth scopes to request (defaults to "atproto transition:generic")
+	Scopes []string
+
+	// SessionStore is the storage backend for sessions
+	SessionStore SessionStore
+}
+
+// ClientOptions contains configuration options for creating a new Client.
+type ClientOptions struct {
+	// BaseURL is the base URL of the OAuth client (required)
+	BaseURL string
+
+	// ClientName is the display name for the OAuth client (optional, defaults to "Bluesky OAuth Client")
+	ClientName string
+
+	// ApplicationType is the type of OAuth client (optional, defaults to "web")
+	// Valid values: ApplicationTypeWeb ("web") or ApplicationTypeNative ("native")
+	ApplicationType string
+
+	// Scopes are the OAuth scopes to request (optional, defaults to ["atproto", "transition:generic"])
+	Scopes []string
+
+	// SessionStore is the storage backend for sessions (optional, defaults to in-memory store)
+	SessionStore SessionStore
+
+	// HTTPClient is a custom HTTP client to use for all requests (optional, defaults to client with 30s timeout)
+	// Use this to customize timeouts, transport settings, or proxy configuration
+	HTTPClient *http.Client
+}
 
 // Session represents an authenticated user session with Bluesky.
 type Session struct {
