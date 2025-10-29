@@ -288,7 +288,10 @@ func (c *Client) LoginHandler() http.HandlerFunc {
 func (c *Client) CallbackHandler(onSuccess func(w http.ResponseWriter, r *http.Request, sessionID string)) http.HandlerFunc {
 	// Create adapters to convert between internal and public types
 	authFlowAdapter := &authFlowAdapter{client: c}
-	sessionStoreAdapter := &sessionStoreAdapter{store: c.SessionStore}
+	sessionStoreAdapter := &sessionStoreAdapter{
+		store:       c.SessionStore,
+		authAdapter: authFlowAdapter, // Wire up the reference so we can get the full session
+	}
 
 	handlers := &internalhttp.Handlers{
 		AuthFlow:     authFlowAdapter,
@@ -303,7 +306,8 @@ func (c *Client) CallbackHandler(onSuccess func(w http.ResponseWriter, r *http.R
 
 // authFlowAdapter adapts Client to internalhttp.AuthFlow interface
 type authFlowAdapter struct {
-	client *Client
+	client      *Client
+	lastSession *Session // Store the full session from CompleteAuthFlow
 }
 
 func (a *authFlowAdapter) StartAuthFlow(ctx context.Context, handle string) (*internalhttp.FlowState, error) {
@@ -319,6 +323,8 @@ func (a *authFlowAdapter) CompleteAuthFlow(ctx context.Context, code, state, iss
 	if err != nil {
 		return nil, err
 	}
+	// Store the full session for later retrieval by sessionStoreAdapter
+	a.lastSession = session
 	return &internalhttp.Session{
 		DID:         session.DID,
 		AccessToken: session.AccessToken,
@@ -327,18 +333,23 @@ func (a *authFlowAdapter) CompleteAuthFlow(ctx context.Context, code, state, iss
 
 // sessionStoreAdapter adapts SessionStore to internal interface
 type sessionStoreAdapter struct {
-	store SessionStore
+	store       SessionStore
+	authAdapter *authFlowAdapter // Reference to get the full session
 }
 
 func (s *sessionStoreAdapter) Set(sessionID string, session *internalhttp.Session) error {
-	// We only need to store what internal/http knows about
-	// The real Session object is managed by the Client
-	// For now, just delegate - the Session types are compatible for storage
-	publicSession := &Session{
-		DID:         session.DID,
-		AccessToken: session.AccessToken,
+	// Get the full session from the authAdapter
+	// The internal/http.Session only has DID and AccessToken,
+	// but we need to store the complete session with DPoPKey, RefreshToken, etc.
+	fullSession := s.authAdapter.lastSession
+	if fullSession == nil {
+		// Fallback to creating a minimal session if we don't have the full one
+		fullSession = &Session{
+			DID:         session.DID,
+			AccessToken: session.AccessToken,
+		}
 	}
-	return s.store.Set(sessionID, publicSession)
+	return s.store.Set(sessionID, fullSession)
 }
 
 // GetSession retrieves a session by ID from the session store.
