@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Pre-commit Hooks**: Added git pre-commit hooks for local security checks
+  - scripts/pre-commit: Runs govulncheck, tests with race detection, and dependency verification
+  - scripts/install-hooks.sh: Easy installation script
+  - CONTRIBUTING.md: Contributor guidelines with development setup instructions
+  - All checks must pass before commit (can bypass with --no-verify)
+  - Automatic vulnerability detection before code is committed
 - **Dependency Security Scanning**: Added automated dependency management and security scanning (Issue #14)
   - Dependabot configuration for weekly Go module updates
   - Groups minor and patch updates to reduce PR noise
