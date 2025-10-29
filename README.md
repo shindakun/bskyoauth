@@ -398,6 +398,49 @@ if err != nil {
 client.UpdateSession(sessionID, newSession)
 ```
 
+### Handling Expired Tokens in API Calls
+
+While proactive token refresh (checking expiration before API calls) is recommended, you should also handle expired tokens reactively by catching 401 errors:
+
+```go
+// Attempt API operation
+err := client.CreatePost(ctx, session, "Hello!")
+if err != nil {
+    // Check if error is due to expired token
+    if strings.Contains(err.Error(), "invalid_token") && strings.Contains(err.Error(), "401") {
+        log.Printf("Token expired during API call, attempting refresh")
+
+        // Refresh the token
+        newSession, refreshErr := client.RefreshToken(ctx, session)
+        if refreshErr != nil {
+            log.Printf("Token refresh failed: %v", refreshErr)
+            return errors.New("session expired, please log in again")
+        }
+
+        // Update session in your store
+        if err := updateSessionInStore(sessionID, newSession); err != nil {
+            return fmt.Errorf("failed to update session: %w", err)
+        }
+
+        // Retry the operation with refreshed token
+        if err := client.CreatePost(ctx, newSession, "Hello!"); err != nil {
+            return fmt.Errorf("operation failed after refresh: %w", err)
+        }
+
+        log.Printf("Successfully retried operation after token refresh")
+        return nil
+    }
+
+    // Other errors - return as-is
+    return err
+}
+```
+
+This pattern handles cases where:
+- Tokens expire between the expiration check and the API call
+- Users return after long periods of inactivity (12+ hours)
+- Clock skew causes premature expiration
+
 ### Important Notes
 
 - **Single-Use Tokens**: Per AT Protocol spec, refresh tokens are single-use. The old refresh token becomes invalid after a successful refresh.

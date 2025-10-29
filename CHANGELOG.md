@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improves reliability of API calls in high-traffic scenarios
 
 ### Added
+- **Documentation**: Added reactive token refresh pattern to README
+  - Shows how to handle 401 "invalid_token" errors in API calls
+  - Demonstrates automatic refresh and retry pattern
+  - Explains when to use proactive vs reactive refresh strategies
+  - Helps library users implement robust token expiration handling
 - **Pre-commit Hooks**: Added git pre-commit hooks for code quality and security checks
   - scripts/pre-commit: Runs gofmt, golangci-lint, govulncheck, tests with race detection, and dependency verification
   - scripts/install-hooks.sh: Easy installation script
