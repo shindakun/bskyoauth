@@ -69,13 +69,22 @@ func (m *MemorySessionStore) Get(sessionID string) (*Session, error) {
 
 	entry, exists := m.sessions[sessionID]
 	if !exists {
+		Logger.Debug("session not found",
+			"session_id", sessionID)
 		return nil, ErrSessionNotFound
 	}
 
 	// Check if session has expired
 	if time.Now().After(entry.expiresAt) {
+		Logger.Info("session expired",
+			"session_id", sessionID,
+			"expired_at", entry.expiresAt)
 		return nil, ErrSessionNotFound
 	}
+
+	Logger.Debug("session retrieved",
+		"session_id", sessionID,
+		"did", entry.session.DID)
 
 	return entry.session, nil
 }
@@ -86,10 +95,18 @@ func (m *MemorySessionStore) Set(sessionID string, session *Session) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	expiresAt := time.Now().Add(m.ttl)
 	m.sessions[sessionID] = &sessionEntry{
 		session:   session,
-		expiresAt: time.Now().Add(m.ttl),
+		expiresAt: expiresAt,
 	}
+
+	Logger.Info("session created",
+		"session_id", sessionID,
+		"did", session.DID,
+		"expires_at", expiresAt,
+		"ttl", m.ttl)
+
 	return nil
 }
 
@@ -97,6 +114,13 @@ func (m *MemorySessionStore) Set(sessionID string, session *Session) error {
 func (m *MemorySessionStore) Delete(sessionID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// Check if session exists for logging purposes
+	if entry, exists := m.sessions[sessionID]; exists {
+		Logger.Info("session deleted",
+			"session_id", sessionID,
+			"did", entry.session.DID)
+	}
 
 	delete(m.sessions, sessionID)
 	return nil
@@ -135,10 +159,18 @@ func (m *MemorySessionStore) removeExpiredSessions() {
 	defer m.mu.Unlock()
 
 	now := time.Now()
+	expiredCount := 0
 	for sessionID, entry := range m.sessions {
 		if now.After(entry.expiresAt) {
 			delete(m.sessions, sessionID)
+			expiredCount++
 		}
+	}
+
+	if expiredCount > 0 {
+		Logger.Info("expired sessions cleaned up",
+			"count", expiredCount,
+			"remaining_sessions", len(m.sessions))
 	}
 }
 

@@ -45,6 +45,8 @@ func (rl *RateLimiter) getLimiter(ip string) *rate.Limiter {
 // Middleware returns an HTTP middleware that applies rate limiting.
 func (rl *RateLimiter) Middleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		logger := LoggerFromContext(r.Context())
+
 		// Extract IP address
 		ip, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
@@ -69,9 +71,17 @@ func (rl *RateLimiter) Middleware(next http.HandlerFunc) http.HandlerFunc {
 
 		// Check if request is allowed
 		if !limiter.Allow() {
+			logger.Warn("rate limit exceeded",
+				"ip", ip,
+				"path", r.URL.Path,
+				"method", r.Method)
 			http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 			return
 		}
+
+		logger.Debug("rate limit check passed",
+			"ip", ip,
+			"path", r.URL.Path)
 
 		// Call the next handler
 		next(w, r)
@@ -88,6 +98,9 @@ func (rl *RateLimiter) Cleanup(maxAge time.Duration) {
 	// For simplicity, we'll just clear the entire map periodically
 	// This is safe because new limiters are created on demand
 	if len(rl.limiters) > 1000 {
+		Logger.Info("rate limiter cleanup triggered",
+			"limiter_count", len(rl.limiters),
+			"threshold", 1000)
 		rl.limiters = make(map[string]*rate.Limiter)
 	}
 }

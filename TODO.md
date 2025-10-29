@@ -13,24 +13,6 @@ This security audit identified multiple areas for improvement in the bskyoauth l
 
 ## Medium Priority Issues
 
-### 11. Insufficient Logging and Monitoring
-**Files:** Multiple locations
-
-**Issue:** Limited security event logging:
-- No failed login attempt logging
-- No session lifecycle events
-- No suspicious activity monitoring
-
-**Recommendation:**
-- Add structured logging (e.g., logrus, zap)
-- Log security events: failed auth, session creation/deletion, errors
-- Include correlation IDs for request tracking
-- Consider integration with monitoring systems
-
-**Impact:** Enables security incident detection and investigation.
-
----
-
 ### 12. Refresh Token Not Implemented
 **File:** [oauth.go:218](oauth.go#L218)
 
@@ -557,3 +539,71 @@ http.ListenAndServe(":8080", handler)
 - Handler execution tests (middleware doesn't break handlers)
 
 **Impact:** All library users get security headers automatically. Localhost-friendly development with production-ready security. Works in any deployment scenario without configuration.
+
+---
+
+### 11. Insufficient Logging and Monitoring ✅ **COMPLETED**
+**Files:** Multiple locations (oauth.go, session.go, client.go, ratelimit.go, logger.go, logger_test.go)
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+
+**Issue:** Limited security event logging:
+- No failed login attempt logging
+- No session lifecycle events
+- No suspicious activity monitoring
+
+**Implementation:**
+- ✅ Added comprehensive structured logging using Go's standard `log/slog` package
+- ✅ Environment-based configuration (Info for localhost, Error for production)
+- ✅ Silent by default (logs to `io.Discard` unless explicitly configured)
+- ✅ Automatic format selection: Text for development, JSON for production
+- ✅ Context-aware logging with request ID and session ID correlation
+- ✅ Security event logging throughout the codebase:
+  - OAuth flow: start/completion, token exchange, DPoP nonce retries
+  - Session management: creation, retrieval, deletion, expiration, cleanup
+  - API operations: post creation, record operations, failures
+  - Rate limiting: exceeded limits, cleanup operations
+- ✅ Security events logged at ERROR level:
+  - Issuer mismatch attacks
+  - Invalid OAuth states
+  - Token exchange failures
+  - No valid session errors
+- ✅ New logger functions:
+  - `SetLogger()` - Configure global logger
+  - `NewLoggerFromEnv()` - One-line setup with environment detection
+  - `LogLevelFromEnv()` - Detect log level from BASE_URL
+  - `NewDefaultLogger()` - JSON logger with custom level
+  - `NewTextLogger()` - Text logger with custom level
+- ✅ Context helpers for correlation:
+  - `WithRequestID()` - Add request ID to context
+  - `WithSessionID()` - Add session ID to context
+  - `LoggerFromContext()` - Retrieve logger from context
+  - `GenerateRequestID()` - Generate unique request ID
+- ✅ Comprehensive test coverage (11 new tests in logger_test.go)
+- ✅ Documentation added to README.md with examples
+- ✅ All tests passing (193 total tests)
+
+**Logging Levels:**
+- **Debug**: Rate limit checks passed, session retrieval details
+- **Info**: OAuth flow events, session lifecycle, API operations
+- **Warn**: Failed lookups, invalid inputs, rate limit exceeded
+- **Error**: Security events, critical failures, authentication errors
+
+**Example Usage:**
+```go
+// Automatic environment-based setup
+logger := bskyoauth.NewLoggerFromEnv(os.Getenv("BASE_URL"))
+bskyoauth.SetLogger(logger)
+
+// Manual configuration
+logger := bskyoauth.NewDefaultLogger(slog.LevelError) // JSON, Error level
+bskyoauth.SetLogger(logger)
+
+// Context-aware logging
+ctx := bskyoauth.WithRequestID(r.Context(), bskyoauth.GenerateRequestID())
+ctx = bskyoauth.WithSessionID(ctx, sessionID)
+session, err := client.CompleteAuthFlow(ctx, code, state, iss)
+// Logs include request_id and session_id fields
+```
+
+**Impact:** Enables security incident detection and investigation. Provides request correlation through IDs. Environment-aware configuration for development and production. Zero external dependencies using Go standard library.

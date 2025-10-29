@@ -11,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -153,9 +152,17 @@ func (s *oauthStateStore) stop() {
 // StartAuthFlow initiates the OAuth authorization flow for a given handle.
 // Returns an AuthFlowState with the authorization URL and state information.
 func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowState, error) {
+	logger := LoggerFromContext(ctx)
+	logger.Info("starting OAuth flow",
+		"handle", handle,
+		"client_id", c.ClientID)
+
 	// Generate DPoP key pair
 	dpopKey, err := GenerateDPoPKey()
 	if err != nil {
+		logger.Error("failed to generate DPoP key",
+			"handle", handle,
+			"error", err)
 		return nil, fmt.Errorf("failed to generate DPoP key: %w", err)
 	}
 
@@ -175,6 +182,9 @@ func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowSta
 
 	ident, err := dir.Lookup(ctx, *atid)
 	if err != nil {
+		logger.Warn("handle lookup failed",
+			"handle", handle,
+			"error", err)
 		return nil, fmt.Errorf("%w: %v", ErrInvalidHandle, err)
 	}
 
@@ -204,8 +214,11 @@ func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowSta
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		// Log detailed error internally for debugging/monitoring
-		fmt.Fprintf(os.Stderr, "AUTH_ERROR: Metadata request failed - URL: %s, Status: %s, Body: %s\n",
-			metadataURL, resp.Status, string(body))
+		logger.Error("auth server metadata request failed",
+			"handle", handle,
+			"url", metadataURL,
+			"status", resp.Status,
+			"body", string(body))
 		// Return generic error to user to prevent information disclosure
 		return nil, fmt.Errorf("failed to retrieve authorization server metadata (status: %d)", resp.StatusCode)
 	}
@@ -232,6 +245,11 @@ func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowSta
 	q.Set("login_hint", string(ident.DID))
 	authURL.RawQuery = q.Encode()
 
+	logger.Info("OAuth flow started successfully",
+		"handle", handle,
+		"did", string(ident.DID),
+		"auth_server", authServer)
+
 	return &AuthFlowState{
 		State:        state,
 		CodeVerifier: codeVerifier,
@@ -243,9 +261,16 @@ func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowSta
 
 // CompleteAuthFlow completes the OAuth flow by exchanging the authorization code for tokens.
 func (c *Client) CompleteAuthFlow(ctx context.Context, code, state, issuer string) (*Session, error) {
+	logger := LoggerFromContext(ctx)
+	logger.Info("completing OAuth flow",
+		"issuer", issuer)
+
 	// Retrieve OAuth state
 	oauthState, exists := globalStateStore.get(state)
 	if !exists {
+		logger.Warn("invalid or expired OAuth state",
+			"state", state,
+			"issuer", issuer)
 		return nil, ErrInvalidState
 	}
 	globalStateStore.delete(state)
@@ -254,8 +279,10 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, code, state, issuer strin
 	// This prevents authorization code injection attacks
 	if issuer != oauthState.ExpectedIssuer {
 		// Log security event for monitoring
-		fmt.Fprintf(os.Stderr, "SECURITY: Issuer mismatch detected - expected: %s, got: %s\n",
-			oauthState.ExpectedIssuer, issuer)
+		logger.Error("SECURITY: issuer mismatch detected",
+			"expected_issuer", oauthState.ExpectedIssuer,
+			"received_issuer", issuer,
+			"did", oauthState.DID)
 		return nil, fmt.Errorf("%w: expected %s, got %s", ErrIssuerMismatch,
 			oauthState.ExpectedIssuer, issuer)
 	}
@@ -264,22 +291,34 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, code, state, issuer strin
 	metadataURL := issuer + "/.well-known/oauth-authorization-server"
 	resp, err := http.Get(metadataURL)
 	if err != nil {
+		logger.Error("failed to get auth server metadata for token exchange",
+			"issuer", issuer,
+			"error", err)
 		return nil, fmt.Errorf("failed to get auth server metadata: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var metadata AuthServerMetadata
 	if err := json.NewDecoder(resp.Body).Decode(&metadata); err != nil {
+		logger.Error("failed to decode auth server metadata",
+			"issuer", issuer,
+			"error", err)
 		return nil, fmt.Errorf("failed to decode metadata: %w", err)
 	}
 
 	if metadata.TokenEndpoint == "" {
+		logger.Error("no token endpoint in metadata",
+			"issuer", issuer)
 		return nil, errors.New("no token endpoint in metadata")
 	}
 
 	// Exchange code for tokens with DPoP
-	tokens, err := c.exchangeCodeForTokens(metadata.TokenEndpoint, code, oauthState.CodeVerifier, oauthState.DPoPKey)
+	tokens, err := c.exchangeCodeForTokens(ctx, metadata.TokenEndpoint, code, oauthState.CodeVerifier, oauthState.DPoPKey)
 	if err != nil {
+		logger.Error("token exchange failed",
+			"issuer", issuer,
+			"token_endpoint", metadata.TokenEndpoint,
+			"error", err)
 		return nil, fmt.Errorf("%w: %v", ErrTokenExchange, err)
 	}
 
@@ -287,6 +326,9 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, code, state, issuer strin
 	accessToken, ok := tokens["access_token"].(string)
 	if !ok || accessToken == "" {
 		tokensJSON, _ := json.Marshal(tokens)
+		logger.Error("no access token in token exchange response",
+			"issuer", issuer,
+			"response", string(tokensJSON))
 		return nil, fmt.Errorf("%w: %s", ErrNoAccessToken, string(tokensJSON))
 	}
 
@@ -326,11 +368,17 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, code, state, issuer strin
 		PDS:          issuer,
 	}
 
+	logger.Info("OAuth flow completed successfully",
+		"did", sub,
+		"issuer", issuer,
+		"has_refresh_token", refreshToken != "")
+
 	return session, nil
 }
 
 // exchangeCodeForTokens exchanges an authorization code for access and refresh tokens.
-func (c *Client) exchangeCodeForTokens(tokenEndpoint, code, codeVerifier string, dpopKey interface{}) (map[string]interface{}, error) {
+func (c *Client) exchangeCodeForTokens(ctx context.Context, tokenEndpoint, code, codeVerifier string, dpopKey interface{}) (map[string]interface{}, error) {
+	logger := LoggerFromContext(ctx)
 	// First attempt without nonce to get the nonce
 	dpopProof, err := createDPoPProof(dpopKey.(*ecdsa.PrivateKey), "POST", tokenEndpoint, "", "")
 	if err != nil {
@@ -365,6 +413,8 @@ func (c *Client) exchangeCodeForTokens(tokenEndpoint, code, codeVerifier string,
 				// Get nonce from header and retry
 				nonce := resp.Header.Get("DPoP-Nonce")
 				if nonce != "" {
+					logger.Info("retrying token exchange with DPoP nonce",
+						"token_endpoint", tokenEndpoint)
 					// Retry with nonce
 					dpopProof, err = createDPoPProof(dpopKey.(*ecdsa.PrivateKey), "POST", tokenEndpoint, "", nonce)
 					if err != nil {
@@ -389,8 +439,10 @@ func (c *Client) exchangeCodeForTokens(tokenEndpoint, code, codeVerifier string,
 
 	if resp.StatusCode != http.StatusOK {
 		// Log detailed error internally for debugging/monitoring
-		fmt.Fprintf(os.Stderr, "TOKEN_ERROR: Token exchange failed - Status: %s, Body: %s\n",
-			resp.Status, string(body))
+		logger.Error("token exchange failed",
+			"token_endpoint", tokenEndpoint,
+			"status", resp.Status,
+			"body", string(body))
 		// Return generic error to user to prevent information disclosure
 		return nil, fmt.Errorf("token exchange failed (status: %d)", resp.StatusCode)
 	}

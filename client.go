@@ -96,12 +96,21 @@ func NewClientWithOptions(opts ClientOptions) *Client {
 
 // CreatePost creates a post on Bluesky using the provided session.
 func (c *Client) CreatePost(ctx context.Context, session *Session, text string) error {
+	logger := LoggerFromContext(ctx)
+	logger.Info("creating post",
+		"did", session.DID,
+		"text_length", len(text))
+
 	if session == nil || session.AccessToken == "" {
+		logger.Error("no valid session for CreatePost")
 		return ErrNoSession
 	}
 
 	// Validate post text
 	if err := ValidatePostText(text); err != nil {
+		logger.Warn("invalid post text",
+			"did", session.DID,
+			"error", err)
 		return fmt.Errorf("invalid post text: %w", err)
 	}
 
@@ -153,24 +162,48 @@ func (c *Client) CreatePost(ctx context.Context, session *Session, text string) 
 		session.DPoPNonce = dpopTransport.GetNonce()
 	}
 
-	return err
+	if err != nil {
+		logger.Error("failed to create post",
+			"did", session.DID,
+			"error", err)
+		return err
+	}
+
+	logger.Info("post created successfully",
+		"did", session.DID)
+
+	return nil
 }
 
 // CreateRecord creates a custom record in the specified collection.
 // This is a low-level method that allows creating any type of record.
 // The record parameter should be a map[string]interface{} for custom types.
 func (c *Client) CreateRecord(ctx context.Context, session *Session, collection string, record map[string]interface{}) (*atproto.RepoCreateRecord_Output, error) {
+	logger := LoggerFromContext(ctx)
+	logger.Info("creating record",
+		"did", session.DID,
+		"collection", collection)
+
 	if session == nil || session.AccessToken == "" {
+		logger.Error("no valid session for CreateRecord")
 		return nil, ErrNoSession
 	}
 
 	// Validate collection NSID
 	if err := ValidateCollectionNSID(collection); err != nil {
+		logger.Warn("invalid collection NSID",
+			"did", session.DID,
+			"collection", collection,
+			"error", err)
 		return nil, fmt.Errorf("invalid collection: %w", err)
 	}
 
 	// Validate record fields
 	if err := ValidateRecordFields(record); err != nil {
+		logger.Warn("invalid record fields",
+			"did", session.DID,
+			"collection", collection,
+			"error", err)
 		return nil, fmt.Errorf("invalid record: %w", err)
 	}
 
@@ -221,15 +254,31 @@ func (c *Client) CreateRecord(ctx context.Context, session *Session, collection 
 	}
 
 	if err != nil {
+		logger.Error("failed to create record",
+			"did", session.DID,
+			"collection", collection,
+			"error", err)
 		return nil, err
 	}
+
+	logger.Info("record created successfully",
+		"did", session.DID,
+		"collection", collection,
+		"uri", output.Uri)
 
 	return &output, nil
 }
 
 // DeleteRecord deletes a record from the repository.
 func (c *Client) DeleteRecord(ctx context.Context, session *Session, collection, rkey string) error {
+	logger := LoggerFromContext(ctx)
+	logger.Info("deleting record",
+		"did", session.DID,
+		"collection", collection,
+		"rkey", rkey)
+
 	if session == nil || session.AccessToken == "" {
+		logger.Error("no valid session for DeleteRecord")
 		return ErrNoSession
 	}
 
@@ -272,7 +321,21 @@ func (c *Client) DeleteRecord(ctx context.Context, session *Session, collection,
 		session.DPoPNonce = dpopTransport.GetNonce()
 	}
 
-	return err
+	if err != nil {
+		logger.Error("failed to delete record",
+			"did", session.DID,
+			"collection", collection,
+			"rkey", rkey,
+			"error", err)
+		return err
+	}
+
+	logger.Info("record deleted successfully",
+		"did", session.DID,
+		"collection", collection,
+		"rkey", rkey)
+
+	return nil
 }
 
 // GetClientMetadata returns the OAuth client metadata as a JSON-serializable map.
@@ -302,24 +365,34 @@ func (c *Client) ClientMetadataHandler() http.HandlerFunc {
 // Query parameter: handle (required) - the user's Bluesky handle
 func (c *Client) LoginHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		logger := LoggerFromContext(r.Context())
 		handle := r.URL.Query().Get("handle")
 		if handle == "" {
+			logger.Warn("login attempt with missing handle parameter")
 			http.Error(w, "handle parameter required", http.StatusBadRequest)
 			return
 		}
 
 		// Validate handle format
 		if err := ValidateHandle(handle); err != nil {
+			logger.Warn("login attempt with invalid handle",
+				"handle", handle,
+				"error", err)
 			http.Error(w, fmt.Sprintf("invalid handle: %v", err), http.StatusBadRequest)
 			return
 		}
 
 		flowState, err := c.StartAuthFlow(r.Context(), handle)
 		if err != nil {
+			logger.Error("failed to start auth flow in LoginHandler",
+				"handle", handle,
+				"error", err)
 			http.Error(w, "Failed to start auth flow: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
+		logger.Info("redirecting to OAuth authorization",
+			"handle", handle)
 		http.Redirect(w, r, flowState.AuthURL, http.StatusFound)
 	}
 }
@@ -329,9 +402,14 @@ func (c *Client) LoginHandler() http.HandlerFunc {
 // On success, creates a session and calls the success handler with the session ID.
 func (c *Client) CallbackHandler(onSuccess func(w http.ResponseWriter, r *http.Request, sessionID string)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		logger := LoggerFromContext(r.Context())
+
 		// Check for error response first
 		if errParam := r.URL.Query().Get("error"); errParam != "" {
 			errDesc := r.URL.Query().Get("error_description")
+			logger.Warn("OAuth callback received error",
+				"error", errParam,
+				"description", errDesc)
 			http.Error(w, "OAuth error: "+errParam+" - "+errDesc, http.StatusBadRequest)
 			return
 		}
@@ -341,13 +419,16 @@ func (c *Client) CallbackHandler(onSuccess func(w http.ResponseWriter, r *http.R
 		iss := r.URL.Query().Get("iss")
 
 		if code == "" || state == "" {
-			// Log all query parameters for debugging
+			logger.Warn("OAuth callback missing required parameters",
+				"query_string", r.URL.RawQuery)
 			http.Error(w, "Missing code or state. Received params: "+r.URL.RawQuery, http.StatusBadRequest)
 			return
 		}
 
 		session, err := c.CompleteAuthFlow(r.Context(), code, state, iss)
 		if err != nil {
+			logger.Error("failed to complete auth flow in CallbackHandler",
+				"error", err)
 			http.Error(w, "Failed to complete auth flow: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -355,9 +436,17 @@ func (c *Client) CallbackHandler(onSuccess func(w http.ResponseWriter, r *http.R
 		// Generate session ID and store
 		sessionID := GenerateSessionID()
 		if err := c.SessionStore.Set(sessionID, session); err != nil {
+			logger.Error("failed to store session",
+				"session_id", sessionID,
+				"did", session.DID,
+				"error", err)
 			http.Error(w, "Failed to store session: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		logger.Info("OAuth callback completed successfully",
+			"session_id", sessionID,
+			"did", session.DID)
 
 		onSuccess(w, r, sessionID)
 	}

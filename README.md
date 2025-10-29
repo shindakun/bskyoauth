@@ -201,6 +201,111 @@ http.SetCookie(w, &http.Cookie{
 defer store.Stop()  // Stop cleanup goroutine when shutting down
 ```
 
+## Logging
+
+The library uses Go's standard `log/slog` for structured logging with environment-based configuration.
+
+### Default Behavior
+
+By default, the logger is **silent** (logs to `io.Discard`). No logging output unless explicitly configured.
+
+### Automatic Environment-Based Configuration
+
+The library automatically detects your environment and sets appropriate log levels:
+
+```go
+// Development (localhost) - Info level, text format
+// Set BASE_URL=http://localhost:8181
+logger := bskyoauth.NewLoggerFromEnv("http://localhost:8181")
+bskyoauth.SetLogger(logger)
+
+// Production - Error level, JSON format
+// Set BASE_URL=https://myapp.com
+logger := bskyoauth.NewLoggerFromEnv("https://myapp.com")
+bskyoauth.SetLogger(logger)
+```
+
+### Manual Configuration
+
+For full control over logging:
+
+```go
+// JSON logging at Error level
+logger := bskyoauth.NewDefaultLogger(slog.LevelError)
+bskyoauth.SetLogger(logger)
+
+// Text logging at Debug level
+logger := bskyoauth.NewTextLogger(slog.LevelDebug)
+bskyoauth.SetLogger(logger)
+```
+
+### Context-Aware Logging
+
+Add request and session IDs for request correlation:
+
+```go
+// In your HTTP handler
+func handler(w http.ResponseWriter, r *http.Request) {
+    // Generate request ID
+    requestID := bskyoauth.GenerateRequestID()
+    ctx := bskyoauth.WithRequestID(r.Context(), requestID)
+
+    // Add session ID if available
+    if sessionID, _ := r.Cookie("session_id"); sessionID != nil {
+        ctx = bskyoauth.WithSessionID(ctx, sessionID.Value)
+    }
+
+    // Pass context to library methods
+    session, err := client.CompleteAuthFlow(ctx, code, state, iss)
+    // Logs will include request_id and session_id fields
+}
+```
+
+### What Gets Logged
+
+The library logs key security and operational events:
+
+**OAuth Flow:**
+- Auth flow initiation and completion
+- Token exchange requests and responses
+- DPoP nonce retries
+- Security events (issuer mismatches, invalid states)
+
+**Session Management:**
+- Session creation, retrieval, and deletion
+- Session expiration
+- Periodic cleanup operations
+
+**API Operations:**
+- Post creation, record operations
+- PDS endpoint lookups
+- API request failures
+
+**Rate Limiting:**
+- Rate limit exceeded events
+- Limiter cleanup operations
+
+### Example Log Output
+
+**Development (Text Format):**
+```
+time=2025-01-15T10:30:00.000-07:00 level=INFO msg="starting OAuth flow" handle=alice.bsky.social client_id=http://localhost:8181/client-metadata.json
+time=2025-01-15T10:30:01.234-07:00 level=INFO msg="OAuth flow completed successfully" did=did:plc:abcd1234 issuer=https://bsky.social has_refresh_token=true
+```
+
+**Production (JSON Format):**
+```json
+{"time":"2025-01-15T17:30:00.000Z","level":"ERROR","msg":"SECURITY: issuer mismatch detected","expected_issuer":"https://bsky.social","received_issuer":"https://evil.com","did":"did:plc:abcd1234"}
+```
+
+### Security Logging
+
+Critical security events are always logged at ERROR level:
+- Issuer mismatch attacks
+- Invalid OAuth states
+- Token exchange failures
+- Rate limit violations
+
 ## Example Application
 
 A complete web application example is available in [examples/web-demo](examples/web-demo/main.go).

@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Structured Logging**: Added comprehensive structured logging using Go's standard `log/slog`
+  - Environment-based configuration (Info for localhost, Error for production)
+  - Silent by default (logs to `io.Discard` unless configured)
+  - Automatic format selection: Text for localhost, JSON for production
+  - Context-aware logging with request ID and session ID correlation
+  - Security event logging at ERROR level (issuer mismatches, invalid states)
+  - Logging throughout OAuth flow, session management, API operations, and rate limiting
+  - New functions: `SetLogger()`, `NewLoggerFromEnv()`, `LogLevelFromEnv()`, `NewDefaultLogger()`, `NewTextLogger()`
+  - Context helpers: `WithRequestID()`, `WithSessionID()`, `LoggerFromContext()`, `GenerateRequestID()`
+  - 11 comprehensive test cases for logger functionality
 - Added `DID` field to `internalOAuthState` for reliable session creation
 - Added `JWKSURI` field to `AuthServerMetadata` (not currently used, reserved for future)
 - Comprehensive JWT validation module (jwt.go) remains available for future use or custom implementations
