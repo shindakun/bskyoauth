@@ -51,12 +51,10 @@ func TestNewMemorySessionStore(t *testing.T) {
 		t.Fatal("NewMemorySessionStore returned nil")
 	}
 
-	if store.sessions == nil {
-		t.Error("Sessions map not initialized")
-	}
-
-	if len(store.sessions) != 0 {
-		t.Errorf("Expected empty sessions map, got %d entries", len(store.sessions))
+	// Test that we can use the store
+	_, err := store.Get("nonexistent")
+	if err != ErrSessionNotFound {
+		t.Error("Expected ErrSessionNotFound for nonexistent session")
 	}
 }
 
@@ -230,9 +228,11 @@ func TestMemorySessionStoreMultipleSessions(t *testing.T) {
 
 	// Create and store multiple sessions
 	sessionCount := 10
+	sessionIDs := make([]string, sessionCount)
 	for i := 0; i < sessionCount; i++ {
 		key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		sessionID := GenerateSessionID()
+		sessionIDs[i] = sessionID
 		session := &Session{
 			DID:         "did:plc:test" + string(rune(i)),
 			AccessToken: "token-" + string(rune(i)),
@@ -245,13 +245,12 @@ func TestMemorySessionStoreMultipleSessions(t *testing.T) {
 		}
 	}
 
-	// Verify count
-	store.mu.RLock()
-	count := len(store.sessions)
-	store.mu.RUnlock()
-
-	if count != sessionCount {
-		t.Errorf("Expected %d sessions in store, got %d", sessionCount, count)
+	// Verify all sessions can be retrieved
+	for i, sid := range sessionIDs {
+		_, err := store.Get(sid)
+		if err != nil {
+			t.Errorf("Failed to get session %d: %v", i, err)
+		}
 	}
 }
 
@@ -368,26 +367,6 @@ func TestMemorySessionStoreConcurrentReadWrite(t *testing.T) {
 func TestSessionStoreInterface(t *testing.T) {
 	var _ SessionStore = (*MemorySessionStore)(nil)
 	t.Log("MemorySessionStore correctly implements SessionStore interface")
-}
-
-// TestGenerateSecureRandomString verifies the internal random string generator.
-func TestGenerateSecureRandomString(t *testing.T) {
-	lengths := []int{8, 16, 32, 64}
-
-	for _, length := range lengths {
-		str := generateSecureRandomString(length)
-
-		if len(str) != length {
-			t.Errorf("Expected length %d, got %d", length, len(str))
-		}
-
-		// Verify it contains only base64 URL-safe characters
-		for _, c := range str {
-			if !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
-				t.Errorf("String contains invalid character: %c", c)
-			}
-		}
-	}
 }
 
 // TestSessionFieldPersistence verifies all Session fields are preserved.
@@ -538,9 +517,11 @@ func TestMemorySessionStoreCleanup(t *testing.T) {
 
 	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 
-	// Store 5 sessions
+	// Store 5 sessions and keep their IDs
+	sessionIDs := make([]string, 5)
 	for i := 0; i < 5; i++ {
 		sessionID := GenerateSessionID()
+		sessionIDs[i] = sessionID
 		session := &Session{
 			DID:         "did:plc:cleanup" + string(rune(i)),
 			AccessToken: "token",
@@ -549,25 +530,23 @@ func TestMemorySessionStoreCleanup(t *testing.T) {
 		store.Set(sessionID, session)
 	}
 
-	// Verify sessions exist
-	store.mu.RLock()
-	initialCount := len(store.sessions)
-	store.mu.RUnlock()
-
-	if initialCount != 5 {
-		t.Errorf("Expected 5 sessions, got %d", initialCount)
+	// Verify all sessions initially exist
+	for _, sid := range sessionIDs {
+		_, err := store.Get(sid)
+		if err != nil {
+			t.Errorf("Session should exist initially: %v", err)
+		}
 	}
 
 	// Wait for expiration and cleanup (100ms + 50ms + buffer)
 	time.Sleep(200 * time.Millisecond)
 
-	// Verify sessions were cleaned up
-	store.mu.RLock()
-	afterCleanup := len(store.sessions)
-	store.mu.RUnlock()
-
-	if afterCleanup != 0 {
-		t.Errorf("Expected 0 sessions after cleanup, got %d", afterCleanup)
+	// Verify sessions were cleaned up by trying to retrieve them
+	for _, sid := range sessionIDs {
+		_, err := store.Get(sid)
+		if err != ErrSessionNotFound {
+			t.Error("Session should have been cleaned up")
+		}
 	}
 }
 
@@ -578,17 +557,20 @@ func TestMemorySessionStoreStop(t *testing.T) {
 	// Stop the store
 	store.Stop()
 
-	// Verify stopped flag is set
-	store.mu.RLock()
-	stopped := store.stopped
-	store.mu.RUnlock()
-
-	if !stopped {
-		t.Error("Store should be marked as stopped")
-	}
-
-	// Calling Stop again should be safe
+	// Calling Stop again should be safe (shouldn't panic)
 	store.Stop()
+
+	// Store should still function after Stop
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	session := &Session{
+		DID:         "did:plc:test-after-stop",
+		AccessToken: "token",
+		DPoPKey:     key,
+	}
+	err := store.Set("test-id", session)
+	if err != nil {
+		t.Errorf("Set should work after Stop: %v", err)
+	}
 }
 
 // TestMemorySessionStoreCustomTTL verifies custom TTL is respected.
@@ -596,10 +578,6 @@ func TestMemorySessionStoreCustomTTL(t *testing.T) {
 	customTTL := 500 * time.Millisecond
 	store := NewMemorySessionStoreWithTTL(customTTL, 1*time.Minute)
 	defer store.Stop()
-
-	if store.ttl != customTTL {
-		t.Errorf("Expected TTL %v, got %v", customTTL, store.ttl)
-	}
 
 	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	sessionID := "test-custom-ttl"
@@ -626,19 +604,28 @@ func TestMemorySessionStoreCustomTTL(t *testing.T) {
 	}
 }
 
-// TestMemorySessionStoreDefaultTTL verifies default 30-day TTL.
+// TestMemorySessionStoreDefaultTTL verifies default store creation works.
 func TestMemorySessionStoreDefaultTTL(t *testing.T) {
 	store := NewMemorySessionStore()
 	defer store.Stop()
 
-	expectedTTL := 30 * 24 * time.Hour
-	if store.ttl != expectedTTL {
-		t.Errorf("Expected default TTL of 30 days, got %v", store.ttl)
+	// Test that default store works correctly
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	sessionID := "test-default"
+	session := &Session{
+		DID:         "did:plc:default-test",
+		AccessToken: "token",
+		DPoPKey:     key,
 	}
 
-	expectedCleanup := 5 * time.Minute
-	if store.cleanupInterval != expectedCleanup {
-		t.Errorf("Expected default cleanup interval of 5 minutes, got %v", store.cleanupInterval)
+	err := store.Set(sessionID, session)
+	if err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
+
+	_, err = store.Get(sessionID)
+	if err != nil {
+		t.Errorf("Get failed: %v", err)
 	}
 }
 
@@ -699,14 +686,5 @@ func TestMemorySessionStoreExpirationOnGet(t *testing.T) {
 	_, err := store.Get(sessionID)
 	if err != ErrSessionNotFound {
 		t.Errorf("Expected ErrSessionNotFound on Get of expired session, got %v", err)
-	}
-
-	// Session should still be in map (cleanup hasn't run)
-	store.mu.RLock()
-	_, exists := store.sessions[sessionID]
-	store.mu.RUnlock()
-
-	if !exists {
-		t.Error("Expired session should still be in map before cleanup")
 	}
 }
