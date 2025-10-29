@@ -17,6 +17,10 @@ func main() {
 		baseURL = "http://localhost:8181"
 	}
 
+	// Configure structured logging based on environment
+	logger := bskyoauth.NewLoggerFromEnv(baseURL)
+	bskyoauth.SetLogger(logger)
+
 	// Security check: warn if not using HTTPS in non-local environments
 	if !strings.HasPrefix(baseURL, "https://") && !strings.Contains(baseURL, "localhost") && !strings.Contains(baseURL, "127.0.0.1") {
 		log.Println("⚠️  WARNING: BASE_URL is not using HTTPS!")
@@ -56,6 +60,14 @@ func main() {
 	if strings.HasPrefix(baseURL, "https://") {
 		log.Println("✓ Using HTTPS - secure configuration")
 	}
+
+	// Show logging configuration
+	if strings.Contains(baseURL, "localhost") || strings.Contains(baseURL, "127.0.0.1") {
+		log.Println("✓ Structured logging enabled: Info level (text format)")
+	} else {
+		log.Println("✓ Structured logging enabled: Error level (JSON format)")
+	}
+
 	log.Println("✓ Rate limiting enabled:")
 	log.Println("  - Auth endpoints: 5 req/s (burst: 10)")
 	log.Println("  - API endpoints: 10 req/s (burst: 20)")
@@ -119,27 +131,35 @@ func loginForm() string {
 
 func loginHandler(client *bskyoauth.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Add request ID for correlation
+		requestID := bskyoauth.GenerateRequestID()
+		ctx := bskyoauth.WithRequestID(r.Context(), requestID)
+
 		handle := r.URL.Query().Get("handle")
 		if handle == "" {
 			http.Error(w, "handle parameter required", http.StatusBadRequest)
 			return
 		}
 
-		log.Printf("Starting auth flow for handle: %s", handle)
+		log.Printf("[%s] Starting auth flow for handle: %s", requestID, handle)
 
-		flowState, err := client.StartAuthFlow(r.Context(), handle)
+		flowState, err := client.StartAuthFlow(ctx, handle)
 		if err != nil {
-			log.Printf("Failed to start auth flow: %v", err)
+			log.Printf("[%s] Failed to start auth flow: %v", requestID, err)
 			http.Error(w, "Failed to start auth flow: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		log.Printf("Redirecting to: %s", flowState.AuthURL)
+		log.Printf("[%s] Redirecting to: %s", requestID, flowState.AuthURL)
 		http.Redirect(w, r, flowState.AuthURL, http.StatusFound)
 	}
 }
 
 func callbackSuccessHandler(w http.ResponseWriter, r *http.Request, sessionID string) {
+	// Add request ID for correlation
+	requestID := bskyoauth.GenerateRequestID()
+	log.Printf("[%s] OAuth callback successful, session: %s", requestID, sessionID)
+
 	// Determine if we're running in secure mode (HTTPS)
 	baseURL := os.Getenv("BASE_URL")
 	if baseURL == "" {
