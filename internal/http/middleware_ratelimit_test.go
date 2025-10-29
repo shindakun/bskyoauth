@@ -1,18 +1,45 @@
-package bskyoauth
+package http
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
 	"golang.org/x/time/rate"
 )
 
+// testLogger implements Logger interface for testing
+type testLogger struct {
+	*slog.Logger
+}
+
+func (l *testLogger) Info(msg string, args ...interface{}) {
+	l.Logger.Info(msg, args...)
+}
+
+func (l *testLogger) Warn(msg string, args ...interface{}) {
+	l.Logger.Warn(msg, args...)
+}
+
+func (l *testLogger) Error(msg string, args ...interface{}) {
+	l.Logger.Error(msg, args...)
+}
+
+func newTestLogger() Logger {
+	return &testLogger{slog.New(slog.NewTextHandler(os.Stdout, nil))}
+}
+
+func loggerGetter(r *http.Request) Logger {
+	return newTestLogger()
+}
+
 // TestRateLimiterAllowsUnderLimit verifies that requests under the rate limit are allowed.
 func TestRateLimiterAllowsUnderLimit(t *testing.T) {
 	// Create a rate limiter: 10 requests per second, burst of 10
-	rl := NewRateLimiter(10, 10)
+	rl := NewRateLimiter(10, 10, loggerGetter)
 
 	// Create a test handler that increments a counter
 	callCount := 0
@@ -42,7 +69,7 @@ func TestRateLimiterAllowsUnderLimit(t *testing.T) {
 // TestRateLimiterBlocksOverLimit verifies that requests over the rate limit are blocked.
 func TestRateLimiterBlocksOverLimit(t *testing.T) {
 	// Create a rate limiter: 1 request per second, burst of 2
-	rl := NewRateLimiter(1, 2)
+	rl := NewRateLimiter(1, 2, loggerGetter)
 
 	callCount := 0
 	handler := rl.Middleware(func(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +124,7 @@ func TestRateLimiterBlocksOverLimit(t *testing.T) {
 // TestRateLimiterPerIP verifies that rate limits are applied per IP address.
 func TestRateLimiterPerIP(t *testing.T) {
 	// Create a rate limiter: 1 request per second, burst of 1
-	rl := NewRateLimiter(1, 1)
+	rl := NewRateLimiter(1, 1, loggerGetter)
 
 	handler := rl.Middleware(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -137,7 +164,7 @@ func TestRateLimiterPerIP(t *testing.T) {
 // TestRateLimiterXForwardedFor verifies that X-Forwarded-For header is respected.
 func TestRateLimiterXForwardedFor(t *testing.T) {
 	// Create a rate limiter: 1 request per second, burst of 1
-	rl := NewRateLimiter(1, 1)
+	rl := NewRateLimiter(1, 1, loggerGetter)
 
 	handler := rl.Middleware(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -180,7 +207,7 @@ func TestRateLimiterXForwardedFor(t *testing.T) {
 // TestRateLimiterXForwardedForChain verifies that only the first IP in X-Forwarded-For chain is used.
 func TestRateLimiterXForwardedForChain(t *testing.T) {
 	// Create a rate limiter: 1 request per second, burst of 1
-	rl := NewRateLimiter(1, 1)
+	rl := NewRateLimiter(1, 1, loggerGetter)
 
 	handler := rl.Middleware(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -211,7 +238,7 @@ func TestRateLimiterXForwardedForChain(t *testing.T) {
 
 // TestRateLimiterCleanup verifies that the cleanup mechanism works.
 func TestRateLimiterCleanup(t *testing.T) {
-	rl := NewRateLimiter(10, 10)
+	rl := NewRateLimiter(10, 10, loggerGetter)
 
 	// Add many limiters to trigger cleanup
 	for i := 0; i < 1500; i++ {
@@ -228,7 +255,7 @@ func TestRateLimiterCleanup(t *testing.T) {
 	}
 
 	// Run cleanup - should clear the map when count exceeds 1000
-	rl.Cleanup(10 * time.Minute)
+	rl.Cleanup(10*time.Minute, newTestLogger())
 
 	rl.mu.RLock()
 	afterCleanup := len(rl.limiters)
@@ -242,7 +269,7 @@ func TestRateLimiterCleanup(t *testing.T) {
 // TestRateLimiterBurstRecovery verifies that burst capacity recovers over time.
 func TestRateLimiterBurstRecovery(t *testing.T) {
 	// Create a rate limiter: 10 requests per second, burst of 2
-	rl := NewRateLimiter(10, 2)
+	rl := NewRateLimiter(10, 2, loggerGetter)
 
 	handler := rl.Middleware(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -288,7 +315,7 @@ func TestRateLimiterBurstRecovery(t *testing.T) {
 
 // TestRateLimiterInvalidRemoteAddr verifies handling of malformed RemoteAddr.
 func TestRateLimiterInvalidRemoteAddr(t *testing.T) {
-	rl := NewRateLimiter(10, 10)
+	rl := NewRateLimiter(10, 10, loggerGetter)
 
 	handler := rl.Middleware(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -309,7 +336,7 @@ func TestRateLimiterInvalidRemoteAddr(t *testing.T) {
 
 // TestNewRateLimiter verifies rate limiter initialization.
 func TestNewRateLimiter(t *testing.T) {
-	rl := NewRateLimiter(5, 10)
+	rl := NewRateLimiter(5, 10, loggerGetter)
 
 	if rl.r != rate.Limit(5) {
 		t.Errorf("Expected rate limit of 5, got %v", rl.r)
@@ -330,7 +357,7 @@ func TestNewRateLimiter(t *testing.T) {
 
 // TestRateLimiterConcurrency verifies thread-safe concurrent access.
 func TestRateLimiterConcurrency(t *testing.T) {
-	rl := NewRateLimiter(100, 100)
+	rl := NewRateLimiter(100, 100, loggerGetter)
 
 	handler := rl.Middleware(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

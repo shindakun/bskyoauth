@@ -1,4 +1,4 @@
-package bskyoauth
+package http
 
 import (
 	"net/http"
