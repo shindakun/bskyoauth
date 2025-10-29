@@ -48,8 +48,8 @@ func main() {
 	mux.HandleFunc("/login", authLimiter.Middleware(loginHandler(client)))
 	mux.HandleFunc("/callback", authLimiter.Middleware(client.CallbackHandler(callbackSuccessHandler)))
 	mux.HandleFunc("/post", apiLimiter.Middleware(postHandler(client)))
-	mux.HandleFunc("/create-ongaku", apiLimiter.Middleware(createOngakuHandler(client)))
-	mux.HandleFunc("/delete-ongaku", apiLimiter.Middleware(deleteOngakuHandler(client)))
+	mux.HandleFunc("/create-record", apiLimiter.Middleware(createRecordHandler(client)))
+	mux.HandleFunc("/delete-record", apiLimiter.Middleware(deleteRecordHandler(client)))
 	mux.HandleFunc("/logout", logoutHandler(client))
 
 	// Apply security headers middleware
@@ -97,14 +97,14 @@ func homeHandler(client *bskyoauth.Client) http.HandlerFunc {
 	</form>
 	<br>
 	<h2>com.demo.bskyoauth</h2>
-	<form action="/create-ongaku" method="post">
-		<textarea name="text" rows="4" cols="50" placeholder="Ongaku prototype text..."></textarea><br>
-		<button type="submit">Create Ongaku Record</button>
+	<form action="/create-record" method="post">
+		<textarea name="text" rows="4" cols="50" placeholder="Custom record text..."></textarea><br>
+		<button type="submit">Create Custom Record</button>
 	</form>
 	<br>
-	<form action="/delete-ongaku" method="post">
+	<form action="/delete-record" method="post">
 		<input type="text" name="rkey" placeholder="Record key (rkey)" required><br>
-		<button type="submit">Delete Ongaku Record</button>
+		<button type="submit">Delete Custom Record</button>
 	</form>
 	<br>
 	<a href="/logout">Logout</a>`, session.DID)
@@ -221,7 +221,7 @@ func postHandler(client *bskyoauth.Client) http.HandlerFunc {
 	}
 }
 
-func createOngakuHandler(client *bskyoauth.Client) http.HandlerFunc {
+func createRecordHandler(client *bskyoauth.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -268,7 +268,7 @@ func createOngakuHandler(client *bskyoauth.Client) http.HandlerFunc {
 	}
 }
 
-func deleteOngakuHandler(client *bskyoauth.Client) http.HandlerFunc {
+func deleteRecordHandler(client *bskyoauth.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
