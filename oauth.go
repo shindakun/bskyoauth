@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -34,7 +35,36 @@ var (
 
 	// ErrIssuerMismatch is returned when the callback issuer doesn't match the expected authorization server
 	ErrIssuerMismatch = errors.New("issuer mismatch: potential authorization code injection attack")
+
+	// defaultHTTPClient is the HTTP client used for OAuth and API requests.
+	// Configurable via SetHTTPClient() for testing or custom configurations.
+	defaultHTTPClient = &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   10 * time.Second, // Connection timeout
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			IdleConnTimeout:       90 * time.Second,
+			MaxIdleConns:          100,
+			MaxIdleConnsPerHost:   10,
+		},
+	}
 )
+
+// SetHTTPClient sets a custom HTTP client for all requests.
+// Useful for testing or custom timeout/transport configurations.
+func SetHTTPClient(client *http.Client) {
+	defaultHTTPClient = client
+}
+
+// GetHTTPClient returns the current HTTP client.
+func GetHTTPClient() *http.Client {
+	return defaultHTTPClient
+}
 
 // oauthStateStore stores temporary OAuth state for PKCE and DPoP keys with TTL
 type oauthStateStore struct {
@@ -205,8 +235,21 @@ func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowSta
 
 	metadataURL := authServer + "/.well-known/oauth-authorization-server"
 
-	resp, err := http.Get(metadataURL)
+	req, err := http.NewRequestWithContext(ctx, "GET", metadataURL, nil)
 	if err != nil {
+		logger.Error("failed to create metadata request",
+			"url", metadataURL,
+			"error", err)
+		return nil, fmt.Errorf("failed to create metadata request: %w", err)
+	}
+
+	resp, err := defaultHTTPClient.Do(req)
+	if err != nil {
+		if IsTimeoutError(err) {
+			logger.Error("auth server metadata request timeout",
+				"url", metadataURL,
+				"error", err)
+		}
 		return nil, fmt.Errorf("failed to get auth server metadata: %w", err)
 	}
 	defer resp.Body.Close()
@@ -289,11 +332,26 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, code, state, issuer strin
 
 	// Get token endpoint from issuer
 	metadataURL := issuer + "/.well-known/oauth-authorization-server"
-	resp, err := http.Get(metadataURL)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", metadataURL, nil)
 	if err != nil {
-		logger.Error("failed to get auth server metadata for token exchange",
+		logger.Error("failed to create metadata request for token exchange",
 			"issuer", issuer,
 			"error", err)
+		return nil, fmt.Errorf("failed to create metadata request: %w", err)
+	}
+
+	resp, err := defaultHTTPClient.Do(req)
+	if err != nil {
+		if IsTimeoutError(err) {
+			logger.Error("auth server metadata request timeout for token exchange",
+				"issuer", issuer,
+				"error", err)
+		} else {
+			logger.Error("failed to get auth server metadata for token exchange",
+				"issuer", issuer,
+				"error", err)
+		}
 		return nil, fmt.Errorf("failed to get auth server metadata: %w", err)
 	}
 	defer resp.Body.Close()
@@ -417,11 +475,26 @@ func (c *Client) RefreshToken(ctx context.Context, session *Session) (*Session, 
 
 	// Get token endpoint from PDS
 	metadataURL := session.PDS + "/.well-known/oauth-authorization-server"
-	resp, err := http.Get(metadataURL)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", metadataURL, nil)
 	if err != nil {
-		logger.Error("failed to get auth server metadata for refresh",
+		logger.Error("failed to create metadata request for refresh",
 			"pds", session.PDS,
 			"error", err)
+		return nil, fmt.Errorf("failed to create metadata request: %w", err)
+	}
+
+	resp, err := defaultHTTPClient.Do(req)
+	if err != nil {
+		if IsTimeoutError(err) {
+			logger.Error("auth server metadata request timeout for refresh",
+				"pds", session.PDS,
+				"error", err)
+		} else {
+			logger.Error("failed to get auth server metadata for refresh",
+				"pds", session.PDS,
+				"error", err)
+		}
 		return nil, fmt.Errorf("failed to get auth server metadata: %w", err)
 	}
 	defer resp.Body.Close()
@@ -513,12 +586,14 @@ func (c *Client) refreshTokenRequest(ctx context.Context, tokenEndpoint, refresh
 	data.Set("refresh_token", refreshToken)
 	data.Set("client_id", c.ClientID)
 
-	req, _ := http.NewRequestWithContext(ctx, "POST", tokenEndpoint, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", tokenEndpoint, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create refresh token request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("DPoP", dpopProof)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -542,11 +617,14 @@ func (c *Client) refreshTokenRequest(ctx context.Context, tokenEndpoint, refresh
 						return nil, err
 					}
 
-					req, _ = http.NewRequestWithContext(ctx, "POST", tokenEndpoint, strings.NewReader(data.Encode()))
+					req, err = http.NewRequestWithContext(ctx, "POST", tokenEndpoint, strings.NewReader(data.Encode()))
+					if err != nil {
+						return nil, fmt.Errorf("failed to create retry refresh token request: %w", err)
+					}
 					req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 					req.Header.Set("DPoP", dpopProof)
 
-					resp, err = client.Do(req)
+					resp, err = defaultHTTPClient.Do(req)
 					if err != nil {
 						return nil, err
 					}
@@ -590,12 +668,14 @@ func (c *Client) exchangeCodeForTokens(ctx context.Context, tokenEndpoint, code,
 	data.Set("client_id", c.ClientID)
 	data.Set("code_verifier", codeVerifier)
 
-	req, _ := http.NewRequest("POST", tokenEndpoint, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", tokenEndpoint, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create token exchange request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("DPoP", dpopProof)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := defaultHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -619,11 +699,14 @@ func (c *Client) exchangeCodeForTokens(ctx context.Context, tokenEndpoint, code,
 						return nil, err
 					}
 
-					req, _ = http.NewRequest("POST", tokenEndpoint, strings.NewReader(data.Encode()))
+					req, err = http.NewRequestWithContext(ctx, "POST", tokenEndpoint, strings.NewReader(data.Encode()))
+					if err != nil {
+						return nil, fmt.Errorf("failed to create retry token exchange request: %w", err)
+					}
 					req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 					req.Header.Set("DPoP", dpopProof)
 
-					resp, err = client.Do(req)
+					resp, err = defaultHTTPClient.Do(req)
 					if err != nil {
 						return nil, err
 					}

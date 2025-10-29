@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Context Timeout Handling**: Added explicit timeout configurations for all HTTP operations (Issue #13)
+  - Default HTTP client with 30 second total timeout
+  - Connection timeout: 10 seconds (TCP handshake)
+  - TLS handshake timeout: 10 seconds
+  - Response header timeout: 10 seconds
+  - Idle connection reuse: 90 seconds
+  - Connection pooling: Max 100 idle connections, 10 per host
+  - All `http.Get()` calls replaced with context-aware `http.NewRequestWithContext()`
+  - All `http.NewRequest()` calls updated to use context
+  - Added `SetHTTPClient()` and `GetHTTPClient()` for custom HTTP client configuration
+  - Added `HTTPClient` field to `ClientOptions` for per-client timeout configuration
+  - Added `IsTimeoutError()` helper function to detect timeout errors (context.DeadlineExceeded, net.Error timeouts, os.ErrDeadlineExceeded)
+  - Timeout-specific error logging throughout OAuth flow
+  - 10 comprehensive test cases for timeout behavior and error detection (timeout_test.go, errors_test.go)
+  - Full documentation in README with examples for custom timeouts, context timeouts, and testing
+  - Zero breaking changes - all additions backwards compatible with sensible defaults
 - **Token Refresh Support**: Implemented refresh token functionality (Issue #12)
   - Added `RefreshToken()` method to exchange refresh tokens for new access tokens
   - Added token expiration tracking to `Session` struct with `AccessTokenExpiresAt` and `RefreshTokenExpiresAt` fields

@@ -55,6 +55,10 @@ type ClientOptions struct {
 
 	// SessionStore is the storage backend for sessions (optional, defaults to in-memory store)
 	SessionStore SessionStore
+
+	// HTTPClient is a custom HTTP client to use for all requests (optional, defaults to client with 30s timeout)
+	// Use this to customize timeouts, transport settings, or proxy configuration
+	HTTPClient *http.Client
 }
 
 // NewClient creates a new Bluesky OAuth client with default settings.
@@ -76,6 +80,11 @@ func NewClientWithOptions(opts ClientOptions) *Client {
 
 	if opts.SessionStore == nil {
 		opts.SessionStore = NewMemorySessionStore()
+	}
+
+	// Use custom HTTP client if provided
+	if opts.HTTPClient != nil {
+		SetHTTPClient(opts.HTTPClient)
 	}
 
 	// Remove trailing slash from BaseURL to avoid double slashes

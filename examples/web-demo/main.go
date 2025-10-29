@@ -29,8 +29,16 @@ func main() {
 		log.Println("⚠️  See README.md Security section for deployment guidance.")
 	}
 
-	// Create OAuth client
-	client := bskyoauth.NewClient(baseURL)
+	// Create OAuth client with custom timeout configuration
+	// For production, you might want shorter timeouts for faster failure detection
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second, // Total request timeout
+	}
+
+	client := bskyoauth.NewClientWithOptions(bskyoauth.ClientOptions{
+		BaseURL:    baseURL,
+		HTTPClient: httpClient,
+	})
 
 	// Create rate limiters for different endpoint types
 	// Login/callback: 5 requests per second, burst of 10 (prevent brute force)
@@ -72,6 +80,7 @@ func main() {
 	log.Println("  - Auth endpoints: 5 req/s (burst: 10)")
 	log.Println("  - API endpoints: 10 req/s (burst: 20)")
 	log.Println("✓ Security headers enabled (auto-detects localhost)")
+	log.Println("✓ HTTP timeouts configured: 30s total request timeout")
 	log.Fatal(http.ListenAndServe(":8181", handler))
 }
 

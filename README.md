@@ -388,6 +388,77 @@ client.UpdateSession(sessionID, newSession)
 - **Automatic Expiration**: The library tracks token expiration times when available from the server.
 - **No Expiration Data**: If the server doesn't provide expiration times, the helper methods assume tokens are valid.
 
+## Timeout Configuration
+
+The library uses sensible default timeouts for all HTTP operations to prevent requests from hanging indefinitely.
+
+### Default Timeouts
+
+- **Request Timeout**: 30 seconds (total request time)
+- **Connection Timeout**: 10 seconds (TCP handshake)
+- **TLS Handshake**: 10 seconds
+- **Response Headers**: 10 seconds
+- **Idle Connections**: Reused for 90 seconds
+
+### Custom Timeouts
+
+Configure custom timeouts for specific requirements:
+
+```go
+// Custom HTTP client with shorter timeout
+customClient := &http.Client{
+    Timeout: 10 * time.Second,
+}
+
+client := bskyoauth.NewClientWithOptions(bskyoauth.ClientOptions{
+    BaseURL:    "https://myapp.com",
+    HTTPClient: customClient,
+})
+```
+
+### Context Timeouts
+
+Use context timeouts for per-request control:
+
+```go
+// 5 second timeout for this specific request
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+
+flowState, err := client.StartAuthFlow(ctx, handle)
+if err != nil {
+    if errors.Is(err, context.DeadlineExceeded) {
+        log.Println("Request timed out")
+    }
+}
+```
+
+### Testing with Timeouts
+
+Override the HTTP client for testing:
+
+```go
+// Fast timeout for tests
+testClient := &http.Client{Timeout: 1 * time.Second}
+bskyoauth.SetHTTPClient(testClient)
+defer bskyoauth.SetHTTPClient(bskyoauth.GetHTTPClient())
+```
+
+### Timeout Error Detection
+
+The library provides a helper to detect timeout errors:
+
+```go
+_, err := client.StartAuthFlow(ctx, handle)
+if err != nil {
+    if bskyoauth.IsTimeoutError(err) {
+        log.Println("Request timed out - check network connection")
+    } else {
+        log.Printf("Other error: %v", err)
+    }
+}
+```
+
 ## Example Application
 
 A complete web application example is available in [examples/web-demo](examples/web-demo/main.go).

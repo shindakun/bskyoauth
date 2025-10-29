@@ -19,18 +19,6 @@ This security audit identified multiple areas for improvement in the bskyoauth l
 
 ## Low Priority / Best Practices
 
-### 13. Add Context Timeout Handling
-**Files:** Multiple API calls
-
-**Issue:** HTTP requests lack explicit timeout configurations.
-
-**Recommendation:**
-- Add context timeouts to all HTTP operations
-- Configure reasonable timeout values (e.g., 30s)
-- Handle timeout errors gracefully
-
----
-
 ### 14. Dependency Security Scanning
 **File:** [go.mod](go.mod)
 
@@ -661,3 +649,79 @@ client.CreatePost(ctx, session, "Hello!")
 ```
 
 **Impact:** Users no longer need to re-authenticate when access tokens expire. Improves user experience and enables shorter-lived access tokens for better security.
+
+---
+
+### 13. Add Context Timeout Handling ✅ **COMPLETED**
+**Files:** oauth.go, client.go, errors.go, timeout_test.go, errors_test.go
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+
+**Issue:** HTTP requests lacked explicit timeout configurations, potentially causing indefinite hangs.
+
+**Implementation:**
+- ✅ Added `defaultHTTPClient` with comprehensive timeout configuration:
+  - Total request timeout: 30 seconds
+  - Connection timeout: 10 seconds (TCP handshake)
+  - TLS handshake timeout: 10 seconds
+  - Response header timeout: 10 seconds
+  - Idle connection reuse: 90 seconds
+  - Connection pooling: Max 100 idle connections, 10 per host
+- ✅ Replaced all `http.Get()` calls with context-aware `http.NewRequestWithContext()`:
+  - 3 occurrences in `StartAuthFlow()`, `CompleteAuthFlow()`, and `RefreshToken()`
+  - All requests now respect context cancellation and timeouts
+- ✅ Updated all `http.NewRequest()` calls to use context:
+  - 2 main requests and 2 retry requests in token exchange functions
+  - Proper error handling for request creation failures
+- ✅ Added `SetHTTPClient()` and `GetHTTPClient()` for global HTTP client configuration
+- ✅ Added `HTTPClient` field to `ClientOptions` for per-client timeout customization
+- ✅ Created `errors.go` with `IsTimeoutError()` helper function:
+  - Detects `context.DeadlineExceeded`
+  - Detects `net.Error` with `Timeout() == true`
+  - Detects `os.ErrDeadlineExceeded`
+  - Supports wrapped errors
+- ✅ Added timeout-specific error logging throughout OAuth flow
+- ✅ 10 comprehensive test cases:
+  - `TestHTTPClientTimeout` - Verifies HTTP timeout behavior
+  - `TestContextCancellation` - Tests context cancellation handling
+  - `TestSetHTTPClient` / `TestGetHTTPClient` - Tests client configuration
+  - `TestClientOptionsWithHTTPClient` - Tests per-client configuration
+  - `TestIsTimeoutError_*` - 5 tests for timeout error detection
+  - `TestDefaultHTTPClientSettings` - Validates default timeout values
+- ✅ Full documentation in README with examples for:
+  - Custom HTTP client timeouts
+  - Context-based per-request timeouts
+  - Testing with custom timeouts
+  - Timeout error detection
+- ✅ Zero breaking changes - all additions backwards compatible with sensible defaults
+
+**Key Features:**
+- **Automatic Timeouts**: All requests have 30s default timeout
+- **Configurable**: Set custom HTTP client globally or per-client
+- **Context-Aware**: Respect context cancellation and deadlines
+- **Error Detection**: Easy identification of timeout errors
+- **Connection Pooling**: Efficient connection reuse
+
+**Example Usage:**
+```go
+// Custom timeout for specific client
+customClient := &http.Client{Timeout: 10 * time.Second}
+client := bskyoauth.NewClientWithOptions(bskyoauth.ClientOptions{
+    BaseURL:    "https://myapp.com",
+    HTTPClient: customClient,
+})
+
+// Context timeout for specific request
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+
+flowState, err := client.StartAuthFlow(ctx, handle)
+if err != nil {
+    if bskyoauth.IsTimeoutError(err) {
+        log.Println("Request timed out")
+    }
+}
+```
+
+**Impact:** Prevents indefinite hangs from unresponsive servers or network issues. Improves reliability and enables better error handling for production deployments.
+
