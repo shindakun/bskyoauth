@@ -263,8 +263,15 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, code, state, issuer strin
 		return nil, errors.New("no token endpoint in metadata")
 	}
 
-	// Exchange code for tokens with DPoP
-	tokens, err := c.exchangeCodeForTokens(ctx, metadata.TokenEndpoint, code, oauthState.CodeVerifier, oauthState.DPoPKey)
+	// Exchange code for tokens with DPoP using internal package
+	tokenExchanger := &oauth.TokenExchanger{
+		ClientID:     c.ClientID,
+		RedirectURI:  c.RedirectURI,
+		HTTPClient:   defaultHTTPClient,
+		LoggerGetter: func(ctx context.Context) oauth.Logger { return LoggerFromContext(ctx) },
+	}
+
+	tokens, err := tokenExchanger.ExchangeCodeForTokens(ctx, metadata.TokenEndpoint, code, oauthState.CodeVerifier, oauthState.DPoPKey)
 	if err != nil {
 		logger.Error("token exchange failed",
 			"issuer", issuer,
@@ -351,53 +358,24 @@ func (c *Client) RefreshToken(ctx context.Context, session *Session) (*Session, 
 	logger.Info("refreshing access token",
 		"did", session.DID)
 
-	// Validate we have a refresh token
-	if session.RefreshToken == "" {
-		logger.Error("no refresh token available",
-			"did", session.DID)
-		return nil, errors.New("no refresh token available")
-	}
-
-	// Check if refresh token is expired
-	if !session.RefreshTokenExpiresAt.IsZero() && time.Now().After(session.RefreshTokenExpiresAt) {
-		logger.Warn("refresh token expired",
+	// Validate refresh token using internal package
+	if err := oauth.ValidateRefreshToken(session.RefreshToken, session.RefreshTokenExpiresAt); err != nil {
+		logger.Error("refresh token validation failed",
 			"did", session.DID,
-			"expired_at", session.RefreshTokenExpiresAt)
-		return nil, errors.New("refresh token expired")
-	}
-
-	// Get token endpoint from PDS
-	metadataURL := session.PDS + "/.well-known/oauth-authorization-server"
-
-	req, err := http.NewRequestWithContext(ctx, "GET", metadataURL, nil)
-	if err != nil {
-		logger.Error("failed to create metadata request for refresh",
-			"pds", session.PDS,
 			"error", err)
-		return nil, fmt.Errorf("failed to create metadata request: %w", err)
+		return nil, err
 	}
 
-	resp, err := defaultHTTPClient.Do(req)
+	// Fetch metadata from PDS
+	metadataFetcher := &oauth.MetadataFetcher{
+		HTTPClient:     defaultHTTPClient,
+		LoggerGetter:   func(ctx context.Context) oauth.Logger { return LoggerFromContext(ctx) },
+		IsTimeoutError: IsTimeoutError,
+	}
+
+	metadata, err := metadataFetcher.FetchAuthServerMetadata(ctx, session.PDS)
 	if err != nil {
-		if IsTimeoutError(err) {
-			logger.Error("auth server metadata request timeout for refresh",
-				"pds", session.PDS,
-				"error", err)
-		} else {
-			logger.Error("failed to get auth server metadata for refresh",
-				"pds", session.PDS,
-				"error", err)
-		}
-		return nil, fmt.Errorf("failed to get auth server metadata: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var metadata AuthServerMetadata
-	if err := json.NewDecoder(resp.Body).Decode(&metadata); err != nil {
-		logger.Error("failed to decode auth server metadata",
-			"pds", session.PDS,
-			"error", err)
-		return nil, fmt.Errorf("failed to decode metadata: %w", err)
+		return nil, err
 	}
 
 	if metadata.TokenEndpoint == "" {
@@ -406,8 +384,15 @@ func (c *Client) RefreshToken(ctx context.Context, session *Session) (*Session, 
 		return nil, errors.New("no token endpoint in metadata")
 	}
 
-	// Perform refresh token request with DPoP
-	tokens, err := c.refreshTokenRequest(ctx, metadata.TokenEndpoint, session.RefreshToken, session.DPoPKey, session.DPoPNonce)
+	// Perform refresh token request with DPoP using internal package
+	tokenExchanger := &oauth.TokenExchanger{
+		ClientID:     c.ClientID,
+		RedirectURI:  c.RedirectURI,
+		HTTPClient:   defaultHTTPClient,
+		LoggerGetter: func(ctx context.Context) oauth.Logger { return LoggerFromContext(ctx) },
+	}
+
+	tokens, err := tokenExchanger.RefreshTokenRequest(ctx, metadata.TokenEndpoint, session.RefreshToken, session.DPoPKey, session.DPoPNonce)
 	if err != nil {
 		logger.Error("token refresh failed",
 			"did", session.DID,
@@ -441,18 +426,16 @@ func (c *Client) RefreshToken(ctx context.Context, session *Session) (*Session, 
 		DPoPNonce:    session.DPoPNonce, // Will be updated on next API call
 	}
 
-	// Parse new expiration times
-	if expiresIn, ok := tokens["expires_in"].(float64); ok {
-		newSession.AccessTokenExpiresAt = time.Now().Add(time.Duration(expiresIn) * time.Second)
+	// Parse new expiration times using internal helper
+	if expiresAt, ok := oauth.ParseTokenExpiration(tokens, "expires_in"); ok {
+		newSession.AccessTokenExpiresAt = expiresAt
 		logger.Info("new access token expiration parsed",
-			"expires_in_seconds", expiresIn,
 			"expires_at", newSession.AccessTokenExpiresAt)
 	}
 
-	if refreshExpiresIn, ok := tokens["refresh_expires_in"].(float64); ok {
-		newSession.RefreshTokenExpiresAt = time.Now().Add(time.Duration(refreshExpiresIn) * time.Second)
+	if refreshExpiresAt, ok := oauth.ParseTokenExpiration(tokens, "refresh_expires_in"); ok {
+		newSession.RefreshTokenExpiresAt = refreshExpiresAt
 		logger.Info("new refresh token expiration parsed",
-			"refresh_expires_in_seconds", refreshExpiresIn,
 			"refresh_expires_at", newSession.RefreshTokenExpiresAt)
 	}
 
@@ -461,172 +444,6 @@ func (c *Client) RefreshToken(ctx context.Context, session *Session) (*Session, 
 		"new_access_token_expires_at", newSession.AccessTokenExpiresAt)
 
 	return newSession, nil
-}
-
-// refreshTokenRequest performs the refresh token exchange with DPoP.
-func (c *Client) refreshTokenRequest(ctx context.Context, tokenEndpoint, refreshToken string, dpopKey interface{}, currentNonce string) (map[string]interface{}, error) {
-	logger := LoggerFromContext(ctx)
-
-	// Create DPoP proof for refresh request
-	dpopProof, err := dpop.CreateDPoPProof(dpopKey.(*ecdsa.PrivateKey), "POST", tokenEndpoint, "", currentNonce)
-	if err != nil {
-		return nil, err
-	}
-
-	// Build refresh token request
-	data := url.Values{}
-	data.Set("grant_type", "refresh_token")
-	data.Set("refresh_token", refreshToken)
-	data.Set("client_id", c.ClientID)
-
-	req, err := http.NewRequestWithContext(ctx, "POST", tokenEndpoint, strings.NewReader(data.Encode()))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create refresh token request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("DPoP", dpopProof)
-
-	resp, err := defaultHTTPClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-
-	// Handle DPoP nonce retry (same as token exchange)
-	if resp.StatusCode == http.StatusBadRequest {
-		var errorResp map[string]interface{}
-		if err := json.Unmarshal(body, &errorResp); err == nil {
-			if errorResp["error"] == "use_dpop_nonce" {
-				nonce := resp.Header.Get("DPoP-Nonce")
-				if nonce != "" {
-					logger.Info("retrying token refresh with DPoP nonce",
-						"token_endpoint", tokenEndpoint)
-
-					// Retry with nonce
-					dpopProof, err = dpop.CreateDPoPProof(dpopKey.(*ecdsa.PrivateKey), "POST", tokenEndpoint, "", nonce)
-					if err != nil {
-						return nil, err
-					}
-
-					req, err = http.NewRequestWithContext(ctx, "POST", tokenEndpoint, strings.NewReader(data.Encode()))
-					if err != nil {
-						return nil, fmt.Errorf("failed to create retry refresh token request: %w", err)
-					}
-					req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-					req.Header.Set("DPoP", dpopProof)
-
-					resp, err = defaultHTTPClient.Do(req)
-					if err != nil {
-						return nil, err
-					}
-					defer resp.Body.Close()
-
-					body, _ = io.ReadAll(resp.Body)
-				}
-			}
-		}
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		logger.Error("token refresh request failed",
-			"token_endpoint", tokenEndpoint,
-			"status", resp.Status,
-			"body", string(body))
-		return nil, fmt.Errorf("token refresh failed (status: %d)", resp.StatusCode)
-	}
-
-	var tokens map[string]interface{}
-	if err := json.Unmarshal(body, &tokens); err != nil {
-		return nil, err
-	}
-
-	return tokens, nil
-}
-
-// exchangeCodeForTokens exchanges an authorization code for access and refresh tokens.
-func (c *Client) exchangeCodeForTokens(ctx context.Context, tokenEndpoint, code, codeVerifier string, dpopKey interface{}) (map[string]interface{}, error) {
-	logger := LoggerFromContext(ctx)
-	// First attempt without nonce to get the nonce
-	dpopProof, err := dpop.CreateDPoPProof(dpopKey.(*ecdsa.PrivateKey), "POST", tokenEndpoint, "", "")
-	if err != nil {
-		return nil, err
-	}
-
-	data := url.Values{}
-	data.Set("grant_type", "authorization_code")
-	data.Set("code", code)
-	data.Set("redirect_uri", c.RedirectURI)
-	data.Set("client_id", c.ClientID)
-	data.Set("code_verifier", codeVerifier)
-
-	req, err := http.NewRequestWithContext(ctx, "POST", tokenEndpoint, strings.NewReader(data.Encode()))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create token exchange request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("DPoP", dpopProof)
-
-	resp, err := defaultHTTPClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-
-	// Check if we need to retry with nonce
-	if resp.StatusCode == http.StatusBadRequest {
-		var errorResp map[string]interface{}
-		if err := json.Unmarshal(body, &errorResp); err == nil {
-			if errorResp["error"] == "use_dpop_nonce" {
-				// Get nonce from header and retry
-				nonce := resp.Header.Get("DPoP-Nonce")
-				if nonce != "" {
-					logger.Info("retrying token exchange with DPoP nonce",
-						"token_endpoint", tokenEndpoint)
-					// Retry with nonce
-					dpopProof, err = dpop.CreateDPoPProof(dpopKey.(*ecdsa.PrivateKey), "POST", tokenEndpoint, "", nonce)
-					if err != nil {
-						return nil, err
-					}
-
-					req, err = http.NewRequestWithContext(ctx, "POST", tokenEndpoint, strings.NewReader(data.Encode()))
-					if err != nil {
-						return nil, fmt.Errorf("failed to create retry token exchange request: %w", err)
-					}
-					req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-					req.Header.Set("DPoP", dpopProof)
-
-					resp, err = defaultHTTPClient.Do(req)
-					if err != nil {
-						return nil, err
-					}
-					defer resp.Body.Close()
-
-					body, _ = io.ReadAll(resp.Body)
-				}
-			}
-		}
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		// Log detailed error internally for debugging/monitoring
-		logger.Error("token exchange failed",
-			"token_endpoint", tokenEndpoint,
-			"status", resp.Status,
-			"body", string(body))
-		// Return generic error to user to prevent information disclosure
-		return nil, fmt.Errorf("token exchange failed (status: %d)", resp.StatusCode)
-	}
-
-	var tokens map[string]interface{}
-	if err := json.Unmarshal(body, &tokens); err != nil {
-		return nil, err
-	}
-
-	return tokens, nil
 }
 
 // generateCodeVerifier generates a PKCE code verifier.
