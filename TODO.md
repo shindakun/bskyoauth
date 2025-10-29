@@ -48,6 +48,8 @@ Per the [AT Protocol OAuth specification](https://atproto.com/specs/oauth), **ac
 ### 9. Missing Input Validation and Sanitization
 **File:** [client.go:268-272](client.go#L268-L272), [examples/web-demo/main.go:179](examples/web-demo/main.go#L179)
 
+**Status:** PLANNING - See [IMPLEMENTATION_PLAN_ISSUE9.md](IMPLEMENTATION_PLAN_ISSUE9.md) for detailed plan
+
 **Issue:** Limited validation on user inputs:
 - Handle validation is minimal
 - Post text has no length limits
@@ -59,6 +61,14 @@ Per the [AT Protocol OAuth specification](https://atproto.com/specs/oauth), **ac
 - Sanitize HTML/special characters if displayed
 - Validate handle format before API calls
 - Add schema validation for custom records
+
+**Implementation Plan:**
+- Create validation.go module with centralized validation functions
+- Leverage AT Protocol syntax package for handle/NSID validation
+- Enforce 300 character limit for posts per AT Protocol spec
+- Add 30+ comprehensive validation tests
+- Update client.go and web-demo to use validation
+- See [IMPLEMENTATION_PLAN_ISSUE9.md](IMPLEMENTATION_PLAN_ISSUE9.md) for full details
 
 **Impact:** Prevents injection attacks and resource exhaustion.
 
