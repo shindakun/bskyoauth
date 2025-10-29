@@ -48,6 +48,8 @@ Per the [AT Protocol OAuth specification](https://atproto.com/specs/oauth), **ac
 ### 10. Missing Security Headers
 **File:** [examples/web-demo/main.go](examples/web-demo/main.go)
 
+**Status:** PLANNING - See [IMPLEMENTATION_PLAN_ISSUE10.md](IMPLEMENTATION_PLAN_ISSUE10.md) for detailed plan
+
 **Issue:** Web demo doesn't set security headers:
 - No Content-Security-Policy
 - No X-Frame-Options
@@ -60,7 +62,19 @@ Per the [AT Protocol OAuth specification](https://atproto.com/specs/oauth), **ac
 - Enable XSS protection headers
 - Add HSTS for HTTPS enforcement
 
-**Impact:** Prevents XSS, clickjacking, and other web attacks.
+**Implementation Plan:**
+- Create security.go middleware with environment-aware headers
+- Content-Security-Policy adapts to development vs production
+- Strict CSP in production (no 'unsafe-inline')
+- Relaxed CSP in development (allows 'unsafe-inline' for prototyping)
+- HSTS automatically enabled for HTTPS production deployments
+- HSTS disabled for localhost development
+- Automatic environment detection based on BASE_URL
+- 15+ comprehensive test cases
+- See [IMPLEMENTATION_PLAN_ISSUE10.md](IMPLEMENTATION_PLAN_ISSUE10.md) for full details
+- **NOTE:** Remove IMPLEMENTATION_PLAN_ISSUE10.md when implementation is completed
+
+**Impact:** Prevents XSS, clickjacking, and other web attacks. Production-focused with localhost development support.
 
 ---
 
