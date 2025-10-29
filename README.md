@@ -1,5 +1,7 @@
 # bskyoauth
 
+**Do not use in _production_ without auditing by a human!**
+
 A vibe-guided Go library for implementing Bluesky OAuth authentication with DPoP (Demonstrating Proof-of-Possession) support.
 
 ## Features
