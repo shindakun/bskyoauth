@@ -2,6 +2,7 @@ package bskyoauth
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,11 +10,8 @@ import (
 	"time"
 
 	"github.com/bluesky-social/indigo/api/atproto"
-	"github.com/bluesky-social/indigo/api/bsky"
-	"github.com/bluesky-social/indigo/atproto/identity"
-	"github.com/bluesky-social/indigo/atproto/syntax"
-	"github.com/bluesky-social/indigo/lex/util"
-	"github.com/bluesky-social/indigo/xrpc"
+
+	"github.com/shindakun/bskyoauth/internal/api"
 )
 
 const (
@@ -134,246 +132,117 @@ func NewClientWithOptions(opts ClientOptions) *Client {
 
 // CreatePost creates a post on Bluesky using the provided session.
 func (c *Client) CreatePost(ctx context.Context, session *Session, text string) error {
-	logger := LoggerFromContext(ctx)
-	logger.Info("creating post",
-		"did", session.DID,
-		"text_length", len(text))
-
 	if session == nil || session.AccessToken == "" {
+		logger := LoggerFromContext(ctx)
 		logger.Error("no valid session for CreatePost")
 		return ErrNoSession
 	}
 
-	// Validate post text
-	if err := ValidatePostText(text); err != nil {
-		logger.Warn("invalid post text",
-			"did", session.DID,
-			"error", err)
-		return fmt.Errorf("invalid post text: %w", err)
-	}
-
-	// Get the actual PDS endpoint for this user
-	dir := identity.DefaultDirectory()
-	atid, err := syntax.ParseAtIdentifier(session.DID)
-	if err != nil {
-		return err
-	}
-
-	ident, err := dir.Lookup(ctx, *atid)
-	if err != nil {
-		return err
-	}
-
-	pdsHost := ident.PDSEndpoint()
-
-	// Create HTTP client with DPoP transport, reusing the session's nonce
-	transport := NewDPoPTransport(http.DefaultTransport, session.DPoPKey, session.AccessToken, session.DPoPNonce)
-	httpClient := &http.Client{
-		Transport: transport,
-	}
-
-	client := &xrpc.Client{
-		Host:   pdsHost,
-		Client: httpClient,
-	}
-
-	// Create post record
-	now := time.Now()
-	record := &bsky.FeedPost{
-		Text:      text,
-		CreatedAt: now.Format(time.RFC3339),
-	}
-
-	// Create the post
-	input := &atproto.RepoCreateRecord_Input{
-		Repo:       session.DID,
-		Collection: "app.bsky.feed.post",
-		Record: &util.LexiconTypeDecoder{
-			Val: record,
+	// Use internal API client
+	apiClient := &api.Client{
+		TransportFactory: func(underlying http.RoundTripper, dpopKey *ecdsa.PrivateKey, token string, nonce string) http.RoundTripper {
+			return NewDPoPTransport(underlying, dpopKey, token, nonce)
 		},
+		LoggerGetter: func(ctx context.Context) api.Logger {
+			return LoggerFromContext(ctx)
+		},
+		ValidatePostText: ValidatePostText,
 	}
 
-	_, err = atproto.RepoCreateRecord(ctx, client, input)
+	apiSession := &api.Session{
+		DID:         session.DID,
+		AccessToken: session.AccessToken,
+		DPoPKey:     session.DPoPKey,
+		DPoPNonce:   session.DPoPNonce,
+	}
+
+	err := apiClient.CreatePost(ctx, &api.CreatePostRequest{
+		Session: apiSession,
+		Text:    text,
+	})
 
 	// Update session with the latest nonce
-	if dpopTransport, ok := transport.(DPoPTransport); ok {
-		session.DPoPNonce = dpopTransport.GetNonce()
-	}
+	session.DPoPNonce = apiSession.DPoPNonce
 
-	if err != nil {
-		logger.Error("failed to create post",
-			"did", session.DID,
-			"error", err)
-		return err
-	}
-
-	logger.Info("post created successfully",
-		"did", session.DID)
-
-	return nil
+	return err
 }
 
 // CreateRecord creates a custom record in the specified collection.
 // This is a low-level method that allows creating any type of record.
 // The record parameter should be a map[string]interface{} for custom types.
 func (c *Client) CreateRecord(ctx context.Context, session *Session, collection string, record map[string]interface{}) (*atproto.RepoCreateRecord_Output, error) {
-	logger := LoggerFromContext(ctx)
-	logger.Info("creating record",
-		"did", session.DID,
-		"collection", collection)
-
 	if session == nil || session.AccessToken == "" {
+		logger := LoggerFromContext(ctx)
 		logger.Error("no valid session for CreateRecord")
 		return nil, ErrNoSession
 	}
 
-	// Validate collection NSID
-	if err := ValidateCollectionNSID(collection); err != nil {
-		logger.Warn("invalid collection NSID",
-			"did", session.DID,
-			"collection", collection,
-			"error", err)
-		return nil, fmt.Errorf("invalid collection: %w", err)
+	// Use internal API client
+	apiClient := &api.Client{
+		TransportFactory: func(underlying http.RoundTripper, dpopKey *ecdsa.PrivateKey, token string, nonce string) http.RoundTripper {
+			return NewDPoPTransport(underlying, dpopKey, token, nonce)
+		},
+		LoggerGetter: func(ctx context.Context) api.Logger {
+			return LoggerFromContext(ctx)
+		},
+		ValidateNSID:   ValidateCollectionNSID,
+		ValidateRecord: ValidateRecordFields,
 	}
 
-	// Validate record fields
-	if err := ValidateRecordFields(record); err != nil {
-		logger.Warn("invalid record fields",
-			"did", session.DID,
-			"collection", collection,
-			"error", err)
-		return nil, fmt.Errorf("invalid record: %w", err)
+	apiSession := &api.Session{
+		DID:         session.DID,
+		AccessToken: session.AccessToken,
+		DPoPKey:     session.DPoPKey,
+		DPoPNonce:   session.DPoPNonce,
 	}
 
-	// Get the actual PDS endpoint for this user
-	dir := identity.DefaultDirectory()
-	atid, err := syntax.ParseAtIdentifier(session.DID)
-	if err != nil {
-		return nil, err
-	}
-
-	ident, err := dir.Lookup(ctx, *atid)
-	if err != nil {
-		return nil, err
-	}
-
-	pdsHost := ident.PDSEndpoint()
-
-	// Create HTTP client with DPoP transport, reusing the session's nonce
-	transport := NewDPoPTransport(http.DefaultTransport, session.DPoPKey, session.AccessToken, session.DPoPNonce)
-	httpClient := &http.Client{
-		Transport: transport,
-	}
-
-	xrpcClient := &xrpc.Client{
-		Host:   pdsHost,
-		Client: httpClient,
-	}
-
-	// Add $type field to the record if not present
-	if _, exists := record["$type"]; !exists {
-		record["$type"] = collection
-	}
-
-	// Call the XRPC method directly with the raw input
-	var output atproto.RepoCreateRecord_Output
-
-	input := map[string]interface{}{
-		"repo":       session.DID,
-		"collection": collection,
-		"record":     record,
-	}
-
-	err = xrpcClient.Do(ctx, xrpc.Procedure, "application/json", "com.atproto.repo.createRecord", nil, input, &output)
+	output, err := apiClient.CreateRecord(ctx, &api.CreateRecordRequest{
+		Session:    apiSession,
+		Collection: collection,
+		Record:     record,
+	})
 
 	// Update session with the latest nonce
-	if dpopTransport, ok := transport.(DPoPTransport); ok {
-		session.DPoPNonce = dpopTransport.GetNonce()
-	}
+	session.DPoPNonce = apiSession.DPoPNonce
 
-	if err != nil {
-		logger.Error("failed to create record",
-			"did", session.DID,
-			"collection", collection,
-			"error", err)
-		return nil, err
-	}
-
-	logger.Info("record created successfully",
-		"did", session.DID,
-		"collection", collection,
-		"uri", output.Uri)
-
-	return &output, nil
+	return output, err
 }
 
 // DeleteRecord deletes a record from the repository.
 func (c *Client) DeleteRecord(ctx context.Context, session *Session, collection, rkey string) error {
-	logger := LoggerFromContext(ctx)
-	logger.Info("deleting record",
-		"did", session.DID,
-		"collection", collection,
-		"rkey", rkey)
-
 	if session == nil || session.AccessToken == "" {
+		logger := LoggerFromContext(ctx)
 		logger.Error("no valid session for DeleteRecord")
 		return ErrNoSession
 	}
 
-	// Get the actual PDS endpoint for this user
-	dir := identity.DefaultDirectory()
-	atid, err := syntax.ParseAtIdentifier(session.DID)
-	if err != nil {
-		return err
+	// Use internal API client
+	apiClient := &api.Client{
+		TransportFactory: func(underlying http.RoundTripper, dpopKey *ecdsa.PrivateKey, token string, nonce string) http.RoundTripper {
+			return NewDPoPTransport(underlying, dpopKey, token, nonce)
+		},
+		LoggerGetter: func(ctx context.Context) api.Logger {
+			return LoggerFromContext(ctx)
+		},
 	}
 
-	ident, err := dir.Lookup(ctx, *atid)
-	if err != nil {
-		return err
+	apiSession := &api.Session{
+		DID:         session.DID,
+		AccessToken: session.AccessToken,
+		DPoPKey:     session.DPoPKey,
+		DPoPNonce:   session.DPoPNonce,
 	}
 
-	pdsHost := ident.PDSEndpoint()
-
-	// Create HTTP client with DPoP transport, reusing the session's nonce
-	transport := NewDPoPTransport(http.DefaultTransport, session.DPoPKey, session.AccessToken, session.DPoPNonce)
-	httpClient := &http.Client{
-		Transport: transport,
-	}
-
-	client := &xrpc.Client{
-		Host:   pdsHost,
-		Client: httpClient,
-	}
-
-	// Delete the record
-	input := &atproto.RepoDeleteRecord_Input{
-		Repo:       session.DID,
+	err := apiClient.DeleteRecord(ctx, &api.DeleteRecordRequest{
+		Session:    apiSession,
 		Collection: collection,
 		Rkey:       rkey,
-	}
-
-	_, err = atproto.RepoDeleteRecord(ctx, client, input)
+	})
 
 	// Update session with the latest nonce
-	if dpopTransport, ok := transport.(DPoPTransport); ok {
-		session.DPoPNonce = dpopTransport.GetNonce()
-	}
+	session.DPoPNonce = apiSession.DPoPNonce
 
-	if err != nil {
-		logger.Error("failed to delete record",
-			"did", session.DID,
-			"collection", collection,
-			"rkey", rkey,
-			"error", err)
-		return err
-	}
-
-	logger.Info("record deleted successfully",
-		"did", session.DID,
-		"collection", collection,
-		"rkey", rkey)
-
-	return nil
+	return err
 }
 
 // GetClientMetadata returns the OAuth client metadata as a JSON-serializable map.
