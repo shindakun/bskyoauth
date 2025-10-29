@@ -7,157 +7,6 @@ This security audit identified multiple areas for improvement in the bskyoauth l
 
 ## Critical Priority Issues
 
-### 1. Session Cookie Security Enhancement ✅ **COMPLETED**
-**File:** [examples/web-demo/main.go:137-157](examples/web-demo/main.go#L137-L157), [examples/web-demo/main.go:270-297](examples/web-demo/main.go#L270-L297)
-
-**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
-
-**Issue:** Session cookies lack `Secure` flag and session expiration controls.
-
-**Implementation:**
-- ✅ Added `Secure` flag with automatic HTTPS detection
-  - Checks BASE_URL environment variable
-  - Enables Secure flag when https:// is detected
-  - Safe for localhost development (HTTP allowed)
-- ✅ Added `MaxAge: 86400` (24 hours) for session expiration
-- ✅ Updated callback success handler with enhanced cookie security
-- ✅ Updated logout handler to match cookie attributes for proper deletion
-- ✅ Maintained HttpOnly and SameSite protections
-- ✅ Environment-aware: automatically adapts to deployment context
-
-**Cookie Configuration:**
-```go
-http.SetCookie(w, &http.Cookie{
-    Name:     "session_id",
-    Value:    sessionID,
-    Path:     "/",
-    HttpOnly: true,                  // Prevents JavaScript access
-    Secure:   isSecure,               // HTTPS only in production
-    SameSite: http.SameSiteLaxMode,   // CSRF protection
-    MaxAge:   86400,                  // 24 hours
-})
-```
-
-**Impact:** Prevents cookie interception via HTTPS enforcement and limits session hijacking with time-bound expiration.
-
----
-
-### 2. In-Memory Session Store Lacks Expiration ✅ **COMPLETED**
-**File:** [types.go:61-185](types.go#L61-L185)
-
-**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
-
-**Issue:** MemorySessionStore had no automatic cleanup or TTL mechanism. Sessions persisted indefinitely, causing:
-- Memory leaks in long-running applications
-- Increased attack surface for stolen sessions
-- No automatic session invalidation
-
-**Implementation:**
-- ✅ Added 30-day TTL for sessions (configurable, matches cookie MaxAge)
-- ✅ Implemented automatic cleanup goroutine (runs every 5 minutes)
-- ✅ Added expiration validation on retrieval (defense-in-depth)
-- ✅ Created `sessionEntry` wrapper with `expiresAt` timestamp
-- ✅ Added `NewMemorySessionStoreWithTTL()` for custom TTL configuration
-- ✅ Added `Stop()` method for graceful shutdown
-- ✅ Comprehensive test coverage added (7 new tests)
-- ✅ Thread-safe with proper RWMutex usage
-- ✅ Documentation added to README.md with examples
-
-**Impact:** Memory leaks prevented, session hijacking window limited to 30 days (configurable), proper resource management in long-running applications.
-
----
-
-### 3. OAuth State Store Memory Leak ✅ **COMPLETED**
-**File:** [oauth.go:36-138](oauth.go#L36-L138)
-
-**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
-
-**Issue:** `globalStateStore` never expires entries. If authorization flow is abandoned:
-- State tokens persist forever
-- DPoP private keys remain in memory
-- Potential memory exhaustion
-
-**Implementation:**
-- ✅ Added 10-minute TTL for OAuth state entries (configurable)
-- ✅ Implemented automatic cleanup goroutine (runs every 1 minute)
-- ✅ Added expiration validation on retrieval (defense-in-depth)
-- ✅ Graceful shutdown support for cleanup goroutine
-- ✅ Comprehensive test coverage added
-- ✅ Thread-safe with proper mutex usage
-
-**Impact:** Memory leaks prevented, DoS vector eliminated, improved resource management.
-
----
-
-### 4. Missing HTTPS Enforcement Documentation ✅ **COMPLETED**
-**File:** [README.md](README.md), [examples/web-demo/main.go](examples/web-demo/main.go)
-
-**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
-
-**Issue:** Documentation doesn't emphasize HTTPS requirement for production. OAuth flows over HTTP expose:
-- Authorization codes
-- State parameters
-- Session cookies
-
-**Implementation:**
-- ✅ Added prominent ⚠️ HTTPS warning at top of Security section
-- ✅ Created comprehensive "Production Deployment Best Practices" section
-- ✅ Added reverse proxy configuration examples (nginx, Caddy)
-- ✅ Documented cookie security settings with code examples
-- ✅ Added production security checklist (12 items)
-- ✅ Web-demo example now validates BASE_URL and warns when HTTP is used
-- ✅ Web-demo shows success message when HTTPS is configured
-- ✅ Documented session storage, rate limiting, and additional security measures
-
-**Impact:** Prevents credential exposure in transit, provides clear guidance for secure deployments.
-
----
-
-## High Priority Issues
-
-### 5. Missing CSRF Token Validation Enhancement ✅ **COMPLETED**
-**File:** [oauth.go:246-254](oauth.go#L246-L254)
-
-**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
-
-**Issue:** While OAuth state parameter provides CSRF protection, the callback handler doesn't validate issuer (`iss`) parameter matches expected domain.
-
-**Implementation:**
-- ✅ Added `ExpectedIssuer` field to `internalOAuthState` struct
-- ✅ Expected issuer stored during `StartAuthFlow` based on resolved handle
-- ✅ Issuer validation performed in `CompleteAuthFlow` before token exchange
-- ✅ New `ErrIssuerMismatch` error type for attack detection
-- ✅ Security event logging to stderr for monitoring (includes expected vs actual)
-- ✅ Validation occurs before any network requests to issuer
-- ✅ Test coverage added for issuer storage and retrieval
-
-**Impact:** Prevents authorization code injection attacks, enables security monitoring.
-
----
-
-### 6. Error Information Disclosure ✅ **COMPLETED**
-**Files:** [oauth.go:202-208](oauth.go#L202-L208), [oauth.go:388-393](oauth.go#L388-L393)
-
-**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
-
-**Issue:** Error messages expose internal implementation details:
-- Auth server metadata request failures exposed HTTP status and response body
-- Token exchange failures exposed HTTP status and response body
-- Could leak internal server details, error messages, or system information to attackers
-
-**Implementation:**
-- ✅ Added internal logging to stderr for detailed error information
-- ✅ Generic error messages returned to users (only status code included)
-- ✅ Auth metadata errors: Log full details, return generic message
-- ✅ Token exchange errors: Log full details, return generic message
-- ✅ Prefix logging with "AUTH_ERROR:" and "TOKEN_ERROR:" for easy monitoring
-- ✅ Maintains error wrapping for proper error handling
-- ✅ No breaking changes - error types remain consistent
-
-**Impact:** Prevents information leakage while maintaining debugging capability through logs.
-
----
-
 ### 7. JWT Token Validation - NOT APPLICABLE ⚠️
 **File:** [oauth.go:292-315](oauth.go#L292-L315)
 
@@ -191,33 +40,6 @@ Per the [AT Protocol OAuth specification](https://atproto.com/specs/oauth), **ac
 - Full JWT validation example code available if needed for other purposes
 
 **Impact:** This is the CORRECT behavior per AT Protocol specification. Client-side JWT validation would be redundant and against spec.
-
----
-
-### 8. Missing Rate Limiting ✅ **COMPLETED**
-**Files:** [ratelimit.go](ratelimit.go), [examples/web-demo/main.go:31-47](examples/web-demo/main.go#L31-L47)
-
-**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
-
-**Issue:** No rate limiting on:
-- Login attempts - vulnerable to brute force
-- OAuth callback endpoint - vulnerable to enumeration
-- API operations - vulnerable to DoS
-
-**Implementation:**
-- ✅ Created `RateLimiter` type using golang.org/x/time/rate
-- ✅ Token bucket algorithm with configurable rate and burst limits
-- ✅ IP-based rate limiting per endpoint
-- ✅ Middleware pattern for easy integration
-- ✅ X-Forwarded-For header support for proxied requests
-- ✅ Automatic cleanup of idle limiters (prevents memory leaks)
-- ✅ Applied to web-demo example:
-  - Auth endpoints (login, callback): 5 req/s, burst 10
-  - API endpoints (post, create, delete): 10 req/s, burst 20
-- ✅ Returns HTTP 429 (Too Many Requests) when limit exceeded
-- ✅ Periodic cleanup every 5 minutes
-
-**Impact:** Prevents brute force, enumeration, and DoS attacks on sensitive endpoints.
 
 ---
 
@@ -470,3 +292,181 @@ Document these recommendations for library users:
 - Consider engaging professional security audit for production use
 
 Generated: 2025-10-27
+
+---
+
+## COMPLETED ISSUES
+
+### 1. Session Cookie Security Enhancement ✅ **COMPLETED**
+**File:** [examples/web-demo/main.go:137-157](examples/web-demo/main.go#L137-L157), [examples/web-demo/main.go:270-297](examples/web-demo/main.go#L270-L297)
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+
+**Issue:** Session cookies lack `Secure` flag and session expiration controls.
+
+**Implementation:**
+- ✅ Added `Secure` flag with automatic HTTPS detection
+  - Checks BASE_URL environment variable
+  - Enables Secure flag when https:// is detected
+  - Safe for localhost development (HTTP allowed)
+- ✅ Added `MaxAge: 86400` (24 hours) for session expiration
+- ✅ Updated callback success handler with enhanced cookie security
+- ✅ Updated logout handler to match cookie attributes for proper deletion
+- ✅ Maintained HttpOnly and SameSite protections
+- ✅ Environment-aware: automatically adapts to deployment context
+
+**Cookie Configuration:**
+```go
+http.SetCookie(w, &http.Cookie{
+    Name:     "session_id",
+    Value:    sessionID,
+    Path:     "/",
+    HttpOnly: true,                  // Prevents JavaScript access
+    Secure:   isSecure,               // HTTPS only in production
+    SameSite: http.SameSiteLaxMode,   // CSRF protection
+    MaxAge:   86400,                  // 24 hours
+})
+```
+
+**Impact:** Prevents cookie interception via HTTPS enforcement and limits session hijacking with time-bound expiration.
+
+---
+
+### 2. In-Memory Session Store Lacks Expiration ✅ **COMPLETED**
+**File:** [types.go:61-185](types.go#L61-L185)
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+
+**Issue:** MemorySessionStore had no automatic cleanup or TTL mechanism. Sessions persisted indefinitely, causing:
+- Memory leaks in long-running applications
+- Increased attack surface for stolen sessions
+- No automatic session invalidation
+
+**Implementation:**
+- ✅ Added 30-day TTL for sessions (configurable, matches cookie MaxAge)
+- ✅ Implemented automatic cleanup goroutine (runs every 5 minutes)
+- ✅ Added expiration validation on retrieval (defense-in-depth)
+- ✅ Created `sessionEntry` wrapper with `expiresAt` timestamp
+- ✅ Added `NewMemorySessionStoreWithTTL()` for custom TTL configuration
+- ✅ Added `Stop()` method for graceful shutdown
+- ✅ Comprehensive test coverage added (7 new tests)
+- ✅ Thread-safe with proper RWMutex usage
+- ✅ Documentation added to README.md with examples
+
+**Impact:** Memory leaks prevented, session hijacking window limited to 30 days (configurable), proper resource management in long-running applications.
+
+---
+
+### 3. OAuth State Store Memory Leak ✅ **COMPLETED**
+**File:** [oauth.go:36-138](oauth.go#L36-L138)
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+
+**Issue:** `globalStateStore` never expires entries. If authorization flow is abandoned:
+- State tokens persist forever
+- DPoP private keys remain in memory
+- Potential memory exhaustion
+
+**Implementation:**
+- ✅ Added 10-minute TTL for OAuth state entries (configurable)
+- ✅ Implemented automatic cleanup goroutine (runs every 1 minute)
+- ✅ Added expiration validation on retrieval (defense-in-depth)
+- ✅ Graceful shutdown support for cleanup goroutine
+- ✅ Comprehensive test coverage added
+- ✅ Thread-safe with proper mutex usage
+
+**Impact:** Memory leaks prevented, DoS vector eliminated, improved resource management.
+
+---
+
+### 4. Missing HTTPS Enforcement Documentation ✅ **COMPLETED**
+**File:** [README.md](README.md), [examples/web-demo/main.go](examples/web-demo/main.go)
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+
+**Issue:** Documentation doesn't emphasize HTTPS requirement for production. OAuth flows over HTTP expose:
+- Authorization codes
+- State parameters
+- Session cookies
+
+**Implementation:**
+- ✅ Added prominent ⚠️ HTTPS warning at top of Security section
+- ✅ Created comprehensive "Production Deployment Best Practices" section
+- ✅ Added reverse proxy configuration examples (nginx, Caddy)
+- ✅ Documented cookie security settings with code examples
+- ✅ Added production security checklist (12 items)
+- ✅ Web-demo example now validates BASE_URL and warns when HTTP is used
+- ✅ Web-demo shows success message when HTTPS is configured
+- ✅ Documented session storage, rate limiting, and additional security measures
+
+**Impact:** Prevents credential exposure in transit, provides clear guidance for secure deployments.
+
+---
+
+### 5. Missing CSRF Token Validation Enhancement ✅ **COMPLETED**
+**File:** [oauth.go:246-254](oauth.go#L246-L254)
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+
+**Issue:** While OAuth state parameter provides CSRF protection, the callback handler doesn't validate issuer (`iss`) parameter matches expected domain.
+
+**Implementation:**
+- ✅ Added `ExpectedIssuer` field to `internalOAuthState` struct
+- ✅ Expected issuer stored during `StartAuthFlow` based on resolved handle
+- ✅ Issuer validation performed in `CompleteAuthFlow` before token exchange
+- ✅ New `ErrIssuerMismatch` error type for attack detection
+- ✅ Security event logging to stderr for monitoring (includes expected vs actual)
+- ✅ Validation occurs before any network requests to issuer
+- ✅ Test coverage added for issuer storage and retrieval
+
+**Impact:** Prevents authorization code injection attacks, enables security monitoring.
+
+---
+
+### 6. Error Information Disclosure ✅ **COMPLETED**
+**Files:** [oauth.go:202-208](oauth.go#L202-L208), [oauth.go:388-393](oauth.go#L388-L393)
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+
+**Issue:** Error messages expose internal implementation details:
+- Auth server metadata request failures exposed HTTP status and response body
+- Token exchange failures exposed HTTP status and response body
+- Could leak internal server details, error messages, or system information to attackers
+
+**Implementation:**
+- ✅ Added internal logging to stderr for detailed error information
+- ✅ Generic error messages returned to users (only status code included)
+- ✅ Auth metadata errors: Log full details, return generic message
+- ✅ Token exchange errors: Log full details, return generic message
+- ✅ Prefix logging with "AUTH_ERROR:" and "TOKEN_ERROR:" for easy monitoring
+- ✅ Maintains error wrapping for proper error handling
+- ✅ No breaking changes - error types remain consistent
+
+**Impact:** Prevents information leakage while maintaining debugging capability through logs.
+
+---
+
+### 8. Missing Rate Limiting ✅ **COMPLETED**
+**Files:** [ratelimit.go](ratelimit.go), [examples/web-demo/main.go:31-47](examples/web-demo/main.go#L31-L47)
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+
+**Issue:** No rate limiting on:
+- Login attempts - vulnerable to brute force
+- OAuth callback endpoint - vulnerable to enumeration
+- API operations - vulnerable to DoS
+
+**Implementation:**
+- ✅ Created `RateLimiter` type using golang.org/x/time/rate
+- ✅ Token bucket algorithm with configurable rate and burst limits
+- ✅ IP-based rate limiting per endpoint
+- ✅ Middleware pattern for easy integration
+- ✅ X-Forwarded-For header support for proxied requests
+- ✅ Automatic cleanup of idle limiters (prevents memory leaks)
+- ✅ Applied to web-demo example:
+  - Auth endpoints (login, callback): 5 req/s, burst 10
+  - API endpoints (post, create, delete): 10 req/s, burst 20
+- ✅ Returns HTTP 429 (Too Many Requests) when limit exceeded
+- ✅ Periodic cleanup every 5 minutes
+
+**Impact:** Prevents brute force, enumeration, and DoS attacks on sensitive endpoints.
