@@ -276,9 +276,41 @@ func postHandler(client *bskyoauth.Client) http.HandlerFunc {
 			return
 		}
 
-		if err := client.CreatePost(r.Context(), session, text); err != nil {
-			http.Error(w, "Failed to create post: "+err.Error(), http.StatusInternalServerError)
-			return
+		err = client.CreatePost(r.Context(), session, text)
+		if err != nil {
+			// Check if error is due to expired token
+			if strings.Contains(err.Error(), "invalid_token") && strings.Contains(err.Error(), "401") {
+				log.Printf("Token expired during CreatePost, attempting refresh for session: %s", sessionID.Value)
+
+				// Attempt token refresh
+				requestID := bskyoauth.GenerateRequestID()
+				ctx := bskyoauth.WithRequestID(r.Context(), requestID)
+
+				newSession, refreshErr := client.RefreshToken(ctx, session)
+				if refreshErr != nil {
+					log.Printf("[%s] Token refresh failed: %v", requestID, refreshErr)
+					http.Error(w, "Session expired. Please log in again.", http.StatusUnauthorized)
+					return
+				}
+
+				// Update session in store
+				if updateErr := client.UpdateSession(sessionID.Value, newSession); updateErr != nil {
+					log.Printf("[%s] Failed to update session after refresh: %v", requestID, updateErr)
+					http.Error(w, "Failed to update session", http.StatusInternalServerError)
+					return
+				}
+
+				log.Printf("[%s] Token refreshed, retrying CreatePost", requestID)
+
+				// Retry CreatePost with new token
+				if retryErr := client.CreatePost(r.Context(), newSession, text); retryErr != nil {
+					http.Error(w, "Failed to create post: "+retryErr.Error(), http.StatusInternalServerError)
+					return
+				}
+			} else {
+				http.Error(w, "Failed to create post: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
 		}
 
 		http.Redirect(w, r, "/", http.StatusFound)
@@ -332,8 +364,40 @@ func createRecordHandler(client *bskyoauth.Client) http.HandlerFunc {
 
 		output, err := client.CreateRecord(r.Context(), session, "com.demo.bskyoauth", record)
 		if err != nil {
-			http.Error(w, "Failed to create record: "+err.Error(), http.StatusInternalServerError)
-			return
+			// Check if error is due to expired token
+			if strings.Contains(err.Error(), "invalid_token") && strings.Contains(err.Error(), "401") {
+				log.Printf("Token expired during CreateRecord, attempting refresh for session: %s", sessionID.Value)
+
+				// Attempt token refresh
+				requestID := bskyoauth.GenerateRequestID()
+				ctx := bskyoauth.WithRequestID(r.Context(), requestID)
+
+				newSession, refreshErr := client.RefreshToken(ctx, session)
+				if refreshErr != nil {
+					log.Printf("[%s] Token refresh failed: %v", requestID, refreshErr)
+					http.Error(w, "Session expired. Please log in again.", http.StatusUnauthorized)
+					return
+				}
+
+				// Update session in store
+				if updateErr := client.UpdateSession(sessionID.Value, newSession); updateErr != nil {
+					log.Printf("[%s] Failed to update session after refresh: %v", requestID, updateErr)
+					http.Error(w, "Failed to update session", http.StatusInternalServerError)
+					return
+				}
+
+				log.Printf("[%s] Token refreshed, retrying CreateRecord", requestID)
+
+				// Retry CreateRecord with new token
+				output, err = client.CreateRecord(r.Context(), newSession, "com.demo.bskyoauth", record)
+				if err != nil {
+					http.Error(w, "Failed to create record: "+err.Error(), http.StatusInternalServerError)
+					return
+				}
+			} else {
+				http.Error(w, "Failed to create record: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
 		}
 
 		log.Printf("Created com.demo.bskyoauth record: %s", output.Uri)
@@ -377,8 +441,39 @@ func deleteRecordHandler(client *bskyoauth.Client) http.HandlerFunc {
 
 		err = client.DeleteRecord(r.Context(), session, "com.demo.bskyoauth", rkey)
 		if err != nil {
-			http.Error(w, "Failed to delete record: "+err.Error(), http.StatusInternalServerError)
-			return
+			// Check if error is due to expired token
+			if strings.Contains(err.Error(), "invalid_token") && strings.Contains(err.Error(), "401") {
+				log.Printf("Token expired during DeleteRecord, attempting refresh for session: %s", sessionID.Value)
+
+				// Attempt token refresh
+				requestID := bskyoauth.GenerateRequestID()
+				ctx := bskyoauth.WithRequestID(r.Context(), requestID)
+
+				newSession, refreshErr := client.RefreshToken(ctx, session)
+				if refreshErr != nil {
+					log.Printf("[%s] Token refresh failed: %v", requestID, refreshErr)
+					http.Error(w, "Session expired. Please log in again.", http.StatusUnauthorized)
+					return
+				}
+
+				// Update session in store
+				if updateErr := client.UpdateSession(sessionID.Value, newSession); updateErr != nil {
+					log.Printf("[%s] Failed to update session after refresh: %v", requestID, updateErr)
+					http.Error(w, "Failed to update session", http.StatusInternalServerError)
+					return
+				}
+
+				log.Printf("[%s] Token refreshed, retrying DeleteRecord", requestID)
+
+				// Retry DeleteRecord with new token
+				if retryErr := client.DeleteRecord(r.Context(), newSession, "com.demo.bskyoauth", rkey); retryErr != nil {
+					http.Error(w, "Failed to delete record: "+retryErr.Error(), http.StatusInternalServerError)
+					return
+				}
+			} else {
+				http.Error(w, "Failed to delete record: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
 		}
 
 		log.Printf("Deleted com.demo.bskyoauth record with rkey: %s", rkey)

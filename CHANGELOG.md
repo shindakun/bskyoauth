@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Web-demo Token Expiration Handling**: Fixed 401 "invalid_token" errors after token expiration
+  - Enhanced all API handlers (CreatePost, CreateRecord, DeleteRecord) to automatically refresh tokens on 401 errors
+  - Automatically detects expired token errors and refreshes without user intervention
+  - Retries the original operation with fresh token after successful refresh
+  - Provides clear error messages when refresh fails, prompting re-authentication
+  - Prevents "exp claim timestamp check failed" errors after periods of inactivity
+  - Improves user experience by seamlessly handling token expiration in the background
 - **DPoP Replay Error Handling**: Fixed automatic retry on "DPoP proof replayed" errors
   - Enhanced error detection to recognize replay-related errors ("replayed", "invalid_dpop_proof")
   - Automatically requests and uses fresh nonce when server returns replay error
