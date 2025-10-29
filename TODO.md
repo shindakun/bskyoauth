@@ -19,19 +19,6 @@ This security audit identified multiple areas for improvement in the bskyoauth l
 
 ## Low Priority / Best Practices
 
-### 14. Dependency Security Scanning
-**File:** [go.mod](go.mod)
-
-**Issue:** No automated dependency vulnerability scanning.
-
-**Recommendation:**
-- Integrate `govulncheck` in CI/CD pipeline
-- Use `dependabot` or similar for updates
-- Regularly update dependencies
-- Monitor security advisories for dependencies
-
----
-
 ### 15. Add Security Testing
 **Issue:** No security-focused tests.
 
@@ -724,4 +711,47 @@ if err != nil {
 ```
 
 **Impact:** Prevents indefinite hangs from unresponsive servers or network issues. Improves reliability and enables better error handling for production deployments.
+
+---
+
+### 14. Dependency Security Scanning ✅ **COMPLETED**
+**Files:** .github/dependabot.yml, .github/workflows/security.yml
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+
+**Issue:** No automated dependency vulnerability scanning.
+
+**Implementation:**
+- ✅ Added Dependabot configuration (.github/dependabot.yml):
+  - Weekly Go module dependency updates (Mondays at 9am Pacific)
+  - Groups minor and patch updates together to reduce PR noise
+  - Maximum 5 open PRs to keep review manageable
+  - Auto-labels PRs with "dependencies" and "go"
+  - Auto-rebase strategy for conflict resolution
+  - Commit message prefix: "deps"
+- ✅ Added GitHub Actions security workflow (.github/workflows/security.yml):
+  - Runs `govulncheck` for vulnerability scanning
+  - Executes on push, pull requests, and weekly schedule
+  - Test suite with race detection (-race flag)
+  - Coverage reporting to Codecov
+  - Uses Go version from go.mod for consistency
+- ✅ Scheduled weekly security scans (Mondays at 9am Pacific)
+- ✅ Automatic monitoring of security advisories via Dependabot
+
+**Key Features:**
+- **Automated Updates**: Weekly dependency update PRs
+- **Vulnerability Scanning**: govulncheck integration in CI/CD
+- **Smart Grouping**: Minor/patch updates grouped to reduce noise
+- **Test Coverage**: Full test suite runs on all security checks
+- **Zero Maintenance**: Fully automated, no manual intervention needed
+
+**Example Workflow:**
+1. Dependabot checks for updates every Monday
+2. Creates PR with grouped dependency updates
+3. Security workflow runs automatically
+4. govulncheck scans for vulnerabilities
+5. Tests run with race detection
+6. Review and merge PR if checks pass
+
+**Impact:** Proactive security monitoring ensures vulnerabilities are detected quickly. Automated updates keep dependencies current with minimal maintenance overhead.
 

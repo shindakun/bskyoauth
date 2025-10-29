@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Dependency Security Scanning**: Added automated dependency management and security scanning (Issue #14)
+  - Dependabot configuration for weekly Go module updates
+  - Groups minor and patch updates to reduce PR noise
+  - Maximum 5 open PRs to keep review manageable
+  - Auto-labels with "dependencies" and "go"
+  - GitHub Actions security workflow with govulncheck
+  - Runs on push, pull requests, and weekly schedule
+  - Test suite with race detection and coverage reporting
+  - Proactive vulnerability detection and automated updates
 - **Context Timeout Handling**: Added explicit timeout configurations for all HTTP operations (Issue #13)
   - Default HTTP client with 30 second total timeout
   - Connection timeout: 10 seconds (TCP handshake)
