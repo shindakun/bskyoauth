@@ -46,35 +46,36 @@ Per the [AT Protocol OAuth specification](https://atproto.com/specs/oauth), **ac
 ## Medium Priority Issues
 
 ### 10. Missing Security Headers
-**File:** [examples/web-demo/main.go](examples/web-demo/main.go)
+**File:** Main library (securityheaders.go)
 
 **Status:** PLANNING - See [IMPLEMENTATION_PLAN_ISSUE10.md](IMPLEMENTATION_PLAN_ISSUE10.md) for detailed plan
 
-**Issue:** Web demo doesn't set security headers:
+**Issue:** No security headers middleware in main library:
 - No Content-Security-Policy
 - No X-Frame-Options
 - No X-Content-Type-Options
 - No Strict-Transport-Security
 
 **Recommendation:**
-- Add security headers middleware
+- Add security headers middleware to main library
+- Automatic localhost detection from HTTP request
 - Set appropriate CSP policy
 - Enable XSS protection headers
 - Add HSTS for HTTPS enforcement
 
 **Implementation Plan:**
-- Create security.go middleware with environment-aware headers
-- Content-Security-Policy adapts to development vs production
-- Strict CSP in production (no 'unsafe-inline')
-- Relaxed CSP in development (allows 'unsafe-inline' for prototyping)
-- HSTS automatically enabled for HTTPS production deployments
-- HSTS disabled for localhost development
-- Automatic environment detection based on BASE_URL
-- 15+ comprehensive test cases
+- Create securityheaders.go in MAIN LIBRARY (not just example)
+- Automatic localhost detection from r.Host header
+- Relaxed CSP for localhost (allows 'unsafe-inline' and 'unsafe-eval')
+- Strict CSP for production (no unsafe directives)
+- HSTS automatically enabled for HTTPS (not localhost)
+- Zero configuration required - works from HTTP request
+- Handles reverse proxies (X-Forwarded-Proto)
+- 12+ comprehensive test cases
 - See [IMPLEMENTATION_PLAN_ISSUE10.md](IMPLEMENTATION_PLAN_ISSUE10.md) for full details
 - **NOTE:** Remove IMPLEMENTATION_PLAN_ISSUE10.md when implementation is completed
 
-**Impact:** Prevents XSS, clickjacking, and other web attacks. Production-focused with localhost development support.
+**Impact:** All library users get security headers automatically. Localhost-friendly development with production-ready security.
 
 ---
 
