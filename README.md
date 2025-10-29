@@ -590,6 +590,35 @@ yourdomain.com {
 }
 ```
 
+**ngrok Example (development/testing with HTTPS):**
+
+[ngrok](https://ngrok.com/) provides a quick way to expose your local development server with HTTPS, perfect for testing OAuth flows. Thanks ngrok! :D
+
+```bash
+# Install ngrok (if not already installed)
+# Visit https://ngrok.com/ to sign up and get your auth token
+
+# Start your application on port 8181
+cd examples/web-demo
+BASE_URL=https://YOUR_SUBDOMAIN.ngrok.app go run main.go
+
+# In another terminal, start ngrok
+ngrok http 8181
+
+# ngrok will display a URL like: https://abc123.ngrok.app
+# Update your BASE_URL environment variable to match:
+BASE_URL=https://abc123.ngrok.app go run main.go
+```
+
+**ngrok Features:**
+- ✓ Automatic HTTPS with valid certificates
+- ✓ Inspect HTTP requests in web interface (http://127.0.0.1:4040)
+- ✓ No server configuration required
+- ✓ Perfect for development and testing OAuth flows
+- ✓ Works with Bluesky's OAuth redirect requirements
+
+**Note:** ngrok URLs change on each restart with the free tier. For a permanent subdomain, upgrade to a paid plan or use a reverse proxy in production.
+
 #### 7. Additional Security Measures
 - Keep dependencies updated (`go get -u ./...`)
 - Monitor for security advisories
