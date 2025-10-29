@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `ValidateRecordFields()` function to validate record structures and common fields
 - Added `ValidateCollectionNSID()` function to validate collection names
 - Added comprehensive validation error types (ErrHandleInvalid, ErrTextTooLong, etc.)
+- **SECURITY**: Added `SecurityHeadersMiddleware()` to main library
+  - Automatic localhost detection for relaxed CSP in development
+  - Strict CSP for production (no unsafe-inline or unsafe-eval)
+  - HSTS automatically enabled for HTTPS in production (not localhost)
+  - Works with reverse proxies (checks X-Forwarded-Proto header)
+  - Zero configuration required - detects environment from HTTP request
+  - Applies X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy
+  - 13 comprehensive test cases for security headers behavior
 
 ### Changed
 - **IMPORTANT**: Removed automatic JWT signature validation to comply with AT Protocol OAuth spec
@@ -135,6 +143,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Input validation:** All validation errors return descriptive messages for debugging
 - Validation functions exported for use by library consumers
 - Test count increased from 127 to 193 tests (66 new validation tests added)
+- **Security headers:** Request-based localhost detection (checks r.Host for localhost, 127.0.0.1, [::1], 0.0.0.0)
+- **Security headers:** HTTPS detection via r.TLS or X-Forwarded-Proto header
+- **Security headers:** Localhost CSP includes 'unsafe-inline' and 'unsafe-eval' for development
+- **Security headers:** Production CSP strict with no unsafe directives, includes frame-ancestors 'none'
+- **Security headers:** HSTS only applied for HTTPS in production (never for localhost)
+- **Security headers:** Works automatically with reverse proxies, Docker, and cloud platforms
+- **Security headers:** Applied to web-demo example with single line of code
 
 ### Migration Notes
 - This is a backwards-compatible change with no API modifications

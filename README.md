@@ -1,6 +1,6 @@
 # bskyoauth
 
-A Go library for implementing Bluesky OAuth authentication with DPoP (Demonstrating Proof-of-Possession) support.
+A vibe-guided Go library for implementing Bluesky OAuth authentication with DPoP (Demonstrating Proof-of-Possession) support.
 
 ## Features
 
@@ -306,6 +306,43 @@ if err := bskyoauth.ValidateCollectionNSID("app.bsky.feed.post"); err != nil {
     log.Printf("Invalid collection: %v", err)
 }
 ```
+
+### Security Headers
+
+The library includes automatic security headers middleware that can be applied to your HTTP handlers:
+
+```go
+// Simply wrap your handler
+mux := http.NewServeMux()
+// ... set up handlers ...
+handler := bskyoauth.SecurityHeadersMiddleware()(mux)
+http.ListenAndServe(":8080", handler)
+```
+
+**Automatic Behavior:**
+- **Localhost**: Relaxed CSP with `'unsafe-inline'` and `'unsafe-eval'` for easy development
+- **Production**: Strict CSP with no `'unsafe-inline'` or `'unsafe-eval'`, includes `frame-ancestors 'none'`
+- **HSTS**: Automatically enabled for HTTPS in production (never set for localhost)
+
+**Headers Applied:**
+- **Content-Security-Policy**: Environment-aware (relaxed for localhost, strict for production)
+- **X-Frame-Options**: DENY (prevents clickjacking)
+- **X-Content-Type-Options**: nosniff (prevents MIME-sniffing attacks)
+- **Strict-Transport-Security**: HTTPS production only (not localhost)
+- **X-XSS-Protection**: 1; mode=block
+- **Referrer-Policy**: strict-origin-when-cross-origin
+
+**How it Works:**
+
+The middleware automatically detects localhost from the HTTP request's `Host` header:
+- Localhost addresses: `localhost`, `127.0.0.1`, `[::1]`, `0.0.0.0`
+- Production: Everything else
+
+HTTPS detection checks:
+- `r.TLS != nil` (direct HTTPS connection)
+- `X-Forwarded-Proto: https` (reverse proxy)
+
+No configuration needed - the middleware works automatically in any deployment scenario, including reverse proxies, Docker, and cloud platforms.
 
 ### Access Token Handling
 

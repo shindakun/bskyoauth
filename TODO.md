@@ -45,40 +45,6 @@ Per the [AT Protocol OAuth specification](https://atproto.com/specs/oauth), **ac
 
 ## Medium Priority Issues
 
-### 10. Missing Security Headers
-**File:** Main library (securityheaders.go)
-
-**Status:** PLANNING - See [IMPLEMENTATION_PLAN_ISSUE10.md](IMPLEMENTATION_PLAN_ISSUE10.md) for detailed plan
-
-**Issue:** No security headers middleware in main library:
-- No Content-Security-Policy
-- No X-Frame-Options
-- No X-Content-Type-Options
-- No Strict-Transport-Security
-
-**Recommendation:**
-- Add security headers middleware to main library
-- Automatic localhost detection from HTTP request
-- Set appropriate CSP policy
-- Enable XSS protection headers
-- Add HSTS for HTTPS enforcement
-
-**Implementation Plan:**
-- Create securityheaders.go in MAIN LIBRARY (not just example)
-- Automatic localhost detection from r.Host header
-- Relaxed CSP for localhost (allows 'unsafe-inline' and 'unsafe-eval')
-- Strict CSP for production (no unsafe directives)
-- HSTS automatically enabled for HTTPS (not localhost)
-- Zero configuration required - works from HTTP request
-- Handles reverse proxies (X-Forwarded-Proto)
-- 12+ comprehensive test cases
-- See [IMPLEMENTATION_PLAN_ISSUE10.md](IMPLEMENTATION_PLAN_ISSUE10.md) for full details
-- **NOTE:** Remove IMPLEMENTATION_PLAN_ISSUE10.md when implementation is completed
-
-**Impact:** All library users get security headers automatically. Localhost-friendly development with production-ready security.
-
----
-
 ### 11. Insufficient Logging and Monitoring
 **Files:** Multiple locations
 
@@ -525,3 +491,61 @@ if err := bskyoauth.ValidateTextField(text, "description", 500); err != nil {
 ```
 
 **Impact:** Prevents injection attacks, resource exhaustion, and API errors. Provides early validation with clear error messages.
+
+---
+
+### 10. Missing Security Headers ✅ **COMPLETED**
+**File:** [securityheaders.go](securityheaders.go), [securityheaders_test.go](securityheaders_test.go), [examples/web-demo/main.go](examples/web-demo/main.go)
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+
+**Issue:** No security headers middleware in main library:
+- No Content-Security-Policy
+- No X-Frame-Options
+- No X-Content-Type-Options
+- No Strict-Transport-Security
+
+**Implementation:**
+- ✅ Created `SecurityHeadersMiddleware()` in main library (securityheaders.go)
+- ✅ Automatic localhost detection from HTTP request's Host header
+- ✅ Localhost CSP: Relaxed with 'unsafe-inline' and 'unsafe-eval' for development
+- ✅ Production CSP: Strict with no unsafe directives, includes frame-ancestors 'none'
+- ✅ HSTS: Automatically enabled for HTTPS in production (never for localhost)
+- ✅ HTTPS detection via r.TLS or X-Forwarded-Proto header
+- ✅ Zero configuration required - works automatically from HTTP request
+- ✅ Handles reverse proxies, Docker, and cloud platforms automatically
+- ✅ Comprehensive test suite (securityheaders_test.go) with 13 test cases
+- ✅ Applied to web-demo example with single line of code
+- ✅ Documentation added to README.md with usage examples
+- ✅ CHANGELOG.md updated with technical details
+
+**Headers Applied:**
+- **Content-Security-Policy**: Environment-aware (relaxed localhost, strict production)
+- **X-Frame-Options**: DENY (prevents clickjacking)
+- **X-Content-Type-Options**: nosniff (prevents MIME-sniffing attacks)
+- **Strict-Transport-Security**: HTTPS production only (not localhost)
+- **X-XSS-Protection**: 1; mode=block
+- **Referrer-Policy**: strict-origin-when-cross-origin
+
+**How It Works:**
+```go
+// Simply wrap your handler
+mux := http.NewServeMux()
+// ... set up handlers ...
+handler := bskyoauth.SecurityHeadersMiddleware()(mux)
+http.ListenAndServe(":8080", handler)
+```
+
+**Localhost Detection:**
+- Checks r.Host for: `localhost`, `127.0.0.1`, `[::1]`, `0.0.0.0`
+- Handles IPv6 addresses with brackets correctly
+- Strips port numbers for detection
+
+**Test Coverage:**
+- Localhost detection tests (IPv4, IPv6, ports)
+- CSP policy tests (localhost vs production)
+- HSTS tests (HTTP, HTTPS, localhost)
+- Header application tests (all headers present)
+- Handler execution tests (middleware doesn't break handlers)
+
+**Impact:** All library users get security headers automatically. Localhost-friendly development with production-ready security. Works in any deployment scenario without configuration.

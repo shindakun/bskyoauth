@@ -38,14 +38,18 @@ func main() {
 	apiLimiter.StartCleanup(5*time.Minute, 10*time.Minute)
 
 	// Set up HTTP handlers with rate limiting
-	http.HandleFunc("/", homeHandler(client))
-	http.HandleFunc("/client-metadata.json", client.ClientMetadataHandler())
-	http.HandleFunc("/login", authLimiter.Middleware(loginHandler(client)))
-	http.HandleFunc("/callback", authLimiter.Middleware(client.CallbackHandler(callbackSuccessHandler)))
-	http.HandleFunc("/post", apiLimiter.Middleware(postHandler(client)))
-	http.HandleFunc("/create-ongaku", apiLimiter.Middleware(createOngakuHandler(client)))
-	http.HandleFunc("/delete-ongaku", apiLimiter.Middleware(deleteOngakuHandler(client)))
-	http.HandleFunc("/logout", logoutHandler(client))
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", homeHandler(client))
+	mux.HandleFunc("/client-metadata.json", client.ClientMetadataHandler())
+	mux.HandleFunc("/login", authLimiter.Middleware(loginHandler(client)))
+	mux.HandleFunc("/callback", authLimiter.Middleware(client.CallbackHandler(callbackSuccessHandler)))
+	mux.HandleFunc("/post", apiLimiter.Middleware(postHandler(client)))
+	mux.HandleFunc("/create-ongaku", apiLimiter.Middleware(createOngakuHandler(client)))
+	mux.HandleFunc("/delete-ongaku", apiLimiter.Middleware(deleteOngakuHandler(client)))
+	mux.HandleFunc("/logout", logoutHandler(client))
+
+	// Apply security headers middleware
+	handler := bskyoauth.SecurityHeadersMiddleware()(mux)
 
 	log.Println("Server starting on :8181")
 	log.Println("Base URL:", baseURL)
@@ -55,7 +59,8 @@ func main() {
 	log.Println("✓ Rate limiting enabled:")
 	log.Println("  - Auth endpoints: 5 req/s (burst: 10)")
 	log.Println("  - API endpoints: 10 req/s (burst: 20)")
-	log.Fatal(http.ListenAndServe(":8181", nil))
+	log.Println("✓ Security headers enabled (auto-detects localhost)")
+	log.Fatal(http.ListenAndServe(":8181", handler))
 }
 
 func homeHandler(client *bskyoauth.Client) http.HandlerFunc {
