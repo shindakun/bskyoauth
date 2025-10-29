@@ -1,4 +1,4 @@
-package bskyoauth
+package validation
 
 import (
 	"strings"
