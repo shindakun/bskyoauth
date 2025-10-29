@@ -69,6 +69,7 @@ Per the [AT Protocol OAuth specification](https://atproto.com/specs/oauth), **ac
 - Add 30+ comprehensive validation tests
 - Update client.go and web-demo to use validation
 - See [IMPLEMENTATION_PLAN_ISSUE9.md](IMPLEMENTATION_PLAN_ISSUE9.md) for full details
+- **NOTE:** Remove IMPLEMENTATION_PLAN_ISSUE9.md when implementation is completed
 
 **Impact:** Prevents injection attacks and resource exhaustion.
 
