@@ -196,7 +196,7 @@ func (c *Client) CreatePost(ctx context.Context, session *Session, text string) 
 	_, err = atproto.RepoCreateRecord(ctx, client, input)
 
 	// Update session with the latest nonce
-	if dpopTransport, ok := transport.(*dpopTransport); ok {
+	if dpopTransport, ok := transport.(DPoPTransport); ok {
 		session.DPoPNonce = dpopTransport.GetNonce()
 	}
 
@@ -287,7 +287,7 @@ func (c *Client) CreateRecord(ctx context.Context, session *Session, collection 
 	err = xrpcClient.Do(ctx, xrpc.Procedure, "application/json", "com.atproto.repo.createRecord", nil, input, &output)
 
 	// Update session with the latest nonce
-	if dpopTransport, ok := transport.(*dpopTransport); ok {
+	if dpopTransport, ok := transport.(DPoPTransport); ok {
 		session.DPoPNonce = dpopTransport.GetNonce()
 	}
 
@@ -355,7 +355,7 @@ func (c *Client) DeleteRecord(ctx context.Context, session *Session, collection,
 	_, err = atproto.RepoDeleteRecord(ctx, client, input)
 
 	// Update session with the latest nonce
-	if dpopTransport, ok := transport.(*dpopTransport); ok {
+	if dpopTransport, ok := transport.(DPoPTransport); ok {
 		session.DPoPNonce = dpopTransport.GetNonce()
 	}
 

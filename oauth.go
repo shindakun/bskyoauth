@@ -18,6 +18,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 
+	"github.com/shindakun/bskyoauth/internal/dpop"
 	"github.com/shindakun/bskyoauth/internal/oauth"
 )
 
@@ -93,7 +94,7 @@ func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowSta
 	codeChallenge := generateCodeChallenge(codeVerifier)
 
 	// Generate state
-	state := generateRandomString(32)
+	state := dpop.GenerateRandomString(32)
 
 	// Resolve handle to DID and authorization server
 	dir := identity.DefaultDirectory()
@@ -467,7 +468,7 @@ func (c *Client) refreshTokenRequest(ctx context.Context, tokenEndpoint, refresh
 	logger := LoggerFromContext(ctx)
 
 	// Create DPoP proof for refresh request
-	dpopProof, err := createDPoPProof(dpopKey.(*ecdsa.PrivateKey), "POST", tokenEndpoint, "", currentNonce)
+	dpopProof, err := dpop.CreateDPoPProof(dpopKey.(*ecdsa.PrivateKey), "POST", tokenEndpoint, "", currentNonce)
 	if err != nil {
 		return nil, err
 	}
@@ -504,7 +505,7 @@ func (c *Client) refreshTokenRequest(ctx context.Context, tokenEndpoint, refresh
 						"token_endpoint", tokenEndpoint)
 
 					// Retry with nonce
-					dpopProof, err = createDPoPProof(dpopKey.(*ecdsa.PrivateKey), "POST", tokenEndpoint, "", nonce)
+					dpopProof, err = dpop.CreateDPoPProof(dpopKey.(*ecdsa.PrivateKey), "POST", tokenEndpoint, "", nonce)
 					if err != nil {
 						return nil, err
 					}
@@ -548,7 +549,7 @@ func (c *Client) refreshTokenRequest(ctx context.Context, tokenEndpoint, refresh
 func (c *Client) exchangeCodeForTokens(ctx context.Context, tokenEndpoint, code, codeVerifier string, dpopKey interface{}) (map[string]interface{}, error) {
 	logger := LoggerFromContext(ctx)
 	// First attempt without nonce to get the nonce
-	dpopProof, err := createDPoPProof(dpopKey.(*ecdsa.PrivateKey), "POST", tokenEndpoint, "", "")
+	dpopProof, err := dpop.CreateDPoPProof(dpopKey.(*ecdsa.PrivateKey), "POST", tokenEndpoint, "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -586,7 +587,7 @@ func (c *Client) exchangeCodeForTokens(ctx context.Context, tokenEndpoint, code,
 					logger.Info("retrying token exchange with DPoP nonce",
 						"token_endpoint", tokenEndpoint)
 					// Retry with nonce
-					dpopProof, err = createDPoPProof(dpopKey.(*ecdsa.PrivateKey), "POST", tokenEndpoint, "", nonce)
+					dpopProof, err = dpop.CreateDPoPProof(dpopKey.(*ecdsa.PrivateKey), "POST", tokenEndpoint, "", nonce)
 					if err != nil {
 						return nil, err
 					}
@@ -630,7 +631,7 @@ func (c *Client) exchangeCodeForTokens(ctx context.Context, tokenEndpoint, code,
 
 // generateCodeVerifier generates a PKCE code verifier.
 func generateCodeVerifier() string {
-	return generateRandomString(64)
+	return dpop.GenerateRandomString(64)
 }
 
 // generateCodeChallenge generates a PKCE code challenge from a verifier.
