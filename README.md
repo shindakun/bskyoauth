@@ -20,6 +20,21 @@ A vibe-guided Go library for implementing Bluesky OAuth authentication with DPoP
 go get github.com/shindakun/bskyoauth
 ```
 
+### Development Setup (Optional)
+
+For contributors, install the pre-commit hooks for automatic security checks:
+
+```bash
+./scripts/install-hooks.sh
+```
+
+This installs a git hook that runs before each commit:
+- `govulncheck` - Vulnerability scanning
+- `go test -race` - Tests with race detection
+- `go mod verify` - Dependency verification
+
+To bypass: `git commit --no-verify`
+
 ## Quick Start
 
 ### Basic Usage

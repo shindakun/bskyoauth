@@ -1,0 +1,76 @@
+#!/bin/sh
+#
+# Git pre-commit hook for bskyoauth
+# Runs security checks and tests before allowing commit
+#
+# To install: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# To bypass: git commit --no-verify
+
+set -e
+
+echo "🔍 Running pre-commit checks..."
+echo ""
+
+# Check if govulncheck is installed
+if ! command -v govulncheck >/dev/null 2>&1; then
+    echo "⚠️  govulncheck not found. Installing..."
+    go install golang.org/x/vuln/cmd/govulncheck@latest
+    if [ $? -ne 0 ]; then
+        echo "❌ Failed to install govulncheck"
+        exit 1
+    fi
+fi
+
+# Run govulncheck
+echo "🔒 Running govulncheck..."
+GOVULNCHECK_PATH=$(go env GOPATH)/bin/govulncheck
+if [ ! -f "$GOVULNCHECK_PATH" ]; then
+    GOVULNCHECK_PATH="$HOME/go/bin/govulncheck"
+fi
+
+$GOVULNCHECK_PATH ./... 2>&1 | grep -E "(No vulnerabilities found|Your code is affected)" || {
+    echo ""
+    echo "❌ Vulnerabilities detected! Please fix before committing."
+    echo "   Run: govulncheck ./... for details"
+    echo "   To bypass: git commit --no-verify"
+    exit 1
+}
+
+# Check if vulnerabilities were found
+if $GOVULNCHECK_PATH ./... 2>&1 | grep -q "Your code is affected by [1-9]"; then
+    echo ""
+    echo "❌ Vulnerabilities detected! Please fix before committing."
+    echo "   Run: govulncheck ./... for details"
+    echo "   To bypass: git commit --no-verify"
+    exit 1
+fi
+
+echo "✅ No vulnerabilities found"
+echo ""
+
+# Run tests
+echo "🧪 Running tests..."
+if ! go test -race -timeout=30s ./...; then
+    echo ""
+    echo "❌ Tests failed! Please fix before committing."
+    echo "   To bypass: git commit --no-verify"
+    exit 1
+fi
+
+echo "✅ All tests passed"
+echo ""
+
+# Run go mod verify
+echo "📦 Verifying dependencies..."
+if ! go mod verify; then
+    echo ""
+    echo "❌ Dependency verification failed!"
+    echo "   To bypass: git commit --no-verify"
+    exit 1
+fi
+
+echo "✅ Dependencies verified"
+echo ""
+
+echo "✨ All pre-commit checks passed!"
+exit 0
