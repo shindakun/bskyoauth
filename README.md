@@ -317,7 +317,7 @@ cd examples/web-demo
 go run main.go
 ```
 
-Then visit http://localhost:8181 and log in with your Bluesky handle.
+Then visit http://localhost:8181 and log in with your Bluesky handle. (You'll probably want to use the Ngrok example below instead.)
 
 ## Architecture
 
