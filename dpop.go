@@ -69,15 +69,21 @@ func (t *dpopTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	// Check if we need to retry with nonce
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusBadRequest {
-		// Check for use_dpop_nonce error
-		if newNonce := resp.Header.Get("DPoP-Nonce"); newNonce != "" {
-			// Read the body to check for nonce error
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+		// Read the body to check for DPoP errors
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		bodyStr := string(bodyBytes)
 
-			bodyStr := string(bodyBytes)
-			if strings.Contains(bodyStr, "use_dpop_nonce") || strings.Contains(bodyStr, "nonce") {
-				// Update nonce and retry
+		// Check for DPoP-related errors that require a fresh nonce
+		isDPoPError := strings.Contains(bodyStr, "use_dpop_nonce") ||
+			strings.Contains(bodyStr, "nonce") ||
+			strings.Contains(bodyStr, "replayed") ||
+			strings.Contains(bodyStr, "invalid_dpop_proof")
+
+		if isDPoPError {
+			// Check if server provided a new nonce
+			if newNonce := resp.Header.Get("DPoP-Nonce"); newNonce != "" {
+				// Update nonce and retry with fresh proof
 				t.mu.Lock()
 				t.nonce = newNonce
 				currentNonce = newNonce
@@ -100,9 +106,12 @@ func (t *dpopTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 					return nil, err
 				}
 			} else {
-				// Restore the body for non-nonce errors
+				// DPoP error but no nonce provided - restore body and return error
 				resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 			}
+		} else {
+			// Restore the body for non-DPoP errors
+			resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 	}
 

@@ -482,6 +482,63 @@ func TestDPoPTransportNoRetryOnNonNonceError(t *testing.T) {
 	}
 }
 
+// TestDPoPTransportReplayErrorRetry verifies replay errors trigger nonce retry.
+func TestDPoPTransportReplayErrorRetry(t *testing.T) {
+	key, _ := GenerateDPoPKey()
+	token := "test-token"
+	newNonce := "fresh-nonce-after-replay"
+
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+
+		if requestCount == 1 {
+			// First request: return 401 with replay error
+			w.Header().Set("DPoP-Nonce", newNonce)
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"error":"invalid_dpop_proof","error_description":"DPoP proof replayed"}`))
+		} else {
+			// Second request: verify nonce is present and succeed
+			dpopHeader := r.Header.Get("DPoP")
+			token, _ := jwt.Parse(dpopHeader, func(token *jwt.Token) (interface{}, error) {
+				return &key.PublicKey, nil
+			})
+
+			claims := token.Claims.(jwt.MapClaims)
+			if claims["nonce"] != newNonce {
+				t.Errorf("Expected nonce '%s' in retry after replay, got %v", newNonce, claims["nonce"])
+			}
+
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("success"))
+		}
+	}))
+	defer server.Close()
+
+	transport := NewDPoPTransport(nil, key, token, "")
+	dpopT := transport.(*dpopTransport)
+	client := &http.Client{Transport: transport}
+
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("Request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status 200 after replay retry, got %d", resp.StatusCode)
+	}
+
+	if requestCount != 2 {
+		t.Errorf("Expected 2 requests (initial + retry after replay), got %d", requestCount)
+	}
+
+	// Verify nonce was updated in transport
+	if dpopT.GetNonce() != newNonce {
+		t.Errorf("Nonce not updated after replay: expected %s, got %s", newNonce, dpopT.GetNonce())
+	}
+}
+
 // TestDPoPProofHTUConstruction verifies HTU is constructed correctly.
 func TestDPoPProofHTUConstruction(t *testing.T) {
 	key, _ := GenerateDPoPKey()

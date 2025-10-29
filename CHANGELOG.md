@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **DPoP Replay Error Handling**: Fixed automatic retry on "DPoP proof replayed" errors
+  - Enhanced error detection to recognize replay-related errors ("replayed", "invalid_dpop_proof")
+  - Automatically requests and uses fresh nonce when server returns replay error
+  - Prevents unnecessary failures when server detects replayed DPoP proofs
+  - Added test case `TestDPoPTransportReplayErrorRetry` to verify replay error handling
+  - Improves reliability of API calls in high-traffic scenarios
+
 ### Added
 - **Pre-commit Hooks**: Added git pre-commit hooks for code quality and security checks
   - scripts/pre-commit: Runs gofmt, golangci-lint, govulncheck, tests with race detection, and dependency verification
