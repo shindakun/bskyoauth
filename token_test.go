@@ -11,39 +11,39 @@ import (
 
 func TestIsAccessTokenExpired(t *testing.T) {
 	tests := []struct {
-		name           string
-		expiresAt      time.Time
-		buffer         time.Duration
+		name            string
+		expiresAt       time.Time
+		buffer          time.Duration
 		expectedExpired bool
 	}{
 		{
-			name:           "token expired 1 hour ago",
-			expiresAt:      time.Now().Add(-1 * time.Hour),
-			buffer:         0,
+			name:            "token expired 1 hour ago",
+			expiresAt:       time.Now().Add(-1 * time.Hour),
+			buffer:          0,
 			expectedExpired: true,
 		},
 		{
-			name:           "token expires in 1 hour no buffer",
-			expiresAt:      time.Now().Add(1 * time.Hour),
-			buffer:         0,
+			name:            "token expires in 1 hour no buffer",
+			expiresAt:       time.Now().Add(1 * time.Hour),
+			buffer:          0,
 			expectedExpired: false,
 		},
 		{
-			name:           "token expires in 10 minutes with 15 minute buffer",
-			expiresAt:      time.Now().Add(10 * time.Minute),
-			buffer:         15 * time.Minute,
+			name:            "token expires in 10 minutes with 15 minute buffer",
+			expiresAt:       time.Now().Add(10 * time.Minute),
+			buffer:          15 * time.Minute,
 			expectedExpired: true,
 		},
 		{
-			name:           "token expires in 30 minutes with 5 minute buffer",
-			expiresAt:      time.Now().Add(30 * time.Minute),
-			buffer:         5 * time.Minute,
+			name:            "token expires in 30 minutes with 5 minute buffer",
+			expiresAt:       time.Now().Add(30 * time.Minute),
+			buffer:          5 * time.Minute,
 			expectedExpired: false,
 		},
 		{
-			name:           "no expiration time set",
-			expiresAt:      time.Time{},
-			buffer:         5 * time.Minute,
+			name:            "no expiration time set",
+			expiresAt:       time.Time{},
+			buffer:          5 * time.Minute,
 			expectedExpired: false,
 		},
 	}
@@ -64,23 +64,23 @@ func TestIsAccessTokenExpired(t *testing.T) {
 
 func TestIsRefreshTokenExpired(t *testing.T) {
 	tests := []struct {
-		name           string
-		expiresAt      time.Time
+		name            string
+		expiresAt       time.Time
 		expectedExpired bool
 	}{
 		{
-			name:           "refresh token expired",
-			expiresAt:      time.Now().Add(-1 * time.Hour),
+			name:            "refresh token expired",
+			expiresAt:       time.Now().Add(-1 * time.Hour),
 			expectedExpired: true,
 		},
 		{
-			name:           "refresh token valid",
-			expiresAt:      time.Now().Add(24 * time.Hour),
+			name:            "refresh token valid",
+			expiresAt:       time.Now().Add(24 * time.Hour),
 			expectedExpired: false,
 		},
 		{
-			name:           "no expiration time set",
-			expiresAt:      time.Time{},
+			name:            "no expiration time set",
+			expiresAt:       time.Time{},
 			expectedExpired: false,
 		},
 	}
@@ -101,23 +101,23 @@ func TestIsRefreshTokenExpired(t *testing.T) {
 
 func TestTimeUntilAccessTokenExpiry(t *testing.T) {
 	tests := []struct {
-		name      string
-		expiresAt time.Time
+		name       string
+		expiresAt  time.Time
 		expectZero bool
 	}{
 		{
-			name:      "token expires in 1 hour",
-			expiresAt: time.Now().Add(1 * time.Hour),
+			name:       "token expires in 1 hour",
+			expiresAt:  time.Now().Add(1 * time.Hour),
 			expectZero: false,
 		},
 		{
-			name:      "token already expired",
-			expiresAt: time.Now().Add(-1 * time.Hour),
+			name:       "token already expired",
+			expiresAt:  time.Now().Add(-1 * time.Hour),
 			expectZero: true,
 		},
 		{
-			name:      "no expiration time set",
-			expiresAt: time.Time{},
+			name:       "no expiration time set",
+			expiresAt:  time.Time{},
 			expectZero: true,
 		},
 	}
@@ -158,11 +158,11 @@ func TestUpdateSession(t *testing.T) {
 	// Create initial session
 	dpopKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	session := &Session{
-		DID:          "did:plc:test123",
-		AccessToken:  "old_token",
-		RefreshToken: "refresh_token",
-		DPoPKey:      dpopKey,
-		PDS:          "https://bsky.social",
+		DID:                  "did:plc:test123",
+		AccessToken:          "old_token",
+		RefreshToken:         "refresh_token",
+		DPoPKey:              dpopKey,
+		PDS:                  "https://bsky.social",
 		AccessTokenExpiresAt: time.Now().Add(1 * time.Hour),
 	}
 
@@ -174,11 +174,11 @@ func TestUpdateSession(t *testing.T) {
 
 	// Update with new tokens
 	newSession := &Session{
-		DID:          "did:plc:test123",
-		AccessToken:  "new_token",
-		RefreshToken: "new_refresh_token",
-		DPoPKey:      dpopKey,
-		PDS:          "https://bsky.social",
+		DID:                  "did:plc:test123",
+		AccessToken:          "new_token",
+		RefreshToken:         "new_refresh_token",
+		DPoPKey:              dpopKey,
+		PDS:                  "https://bsky.social",
 		AccessTokenExpiresAt: time.Now().Add(2 * time.Hour),
 	}
 

@@ -156,7 +156,7 @@ func TestRateLimiterXForwardedFor(t *testing.T) {
 
 	// Second request from same real IP (via X-Forwarded-For) should be blocked
 	req2 := httptest.NewRequest("GET", "/test", nil)
-	req2.RemoteAddr = "10.0.0.1:12345" // Same proxy IP
+	req2.RemoteAddr = "10.0.0.1:12345"                // Same proxy IP
 	req2.Header.Set("X-Forwarded-For", "203.0.113.1") // Same real IP
 	w2 := httptest.NewRecorder()
 	handler(w2, req2)
@@ -167,7 +167,7 @@ func TestRateLimiterXForwardedFor(t *testing.T) {
 
 	// Request from different real IP should succeed
 	req3 := httptest.NewRequest("GET", "/test", nil)
-	req3.RemoteAddr = "10.0.0.1:12345" // Same proxy IP
+	req3.RemoteAddr = "10.0.0.1:12345"                // Same proxy IP
 	req3.Header.Set("X-Forwarded-For", "203.0.113.2") // Different real IP
 	w3 := httptest.NewRecorder()
 	handler(w3, req3)

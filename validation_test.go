@@ -60,12 +60,12 @@ func TestValidateHandle_SegmentTooLong(t *testing.T) {
 // TestValidateHandle_InvalidCharacters tests handles with invalid characters
 func TestValidateHandle_InvalidCharacters(t *testing.T) {
 	invalidHandles := []string{
-		"user name.example.com",  // space
-		"user_name.example.com",  // underscore
-		"user@example.com",       // @ symbol
-		"user!.example.com",      // exclamation
-		"user#name.example.com",  // hash
-		"user.example..com",      // consecutive dots
+		"user name.example.com", // space
+		"user_name.example.com", // underscore
+		"user@example.com",      // @ symbol
+		"user!.example.com",     // exclamation
+		"user#name.example.com", // hash
+		"user.example..com",     // consecutive dots
 	}
 
 	for _, handle := range invalidHandles {

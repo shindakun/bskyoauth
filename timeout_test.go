@@ -53,12 +53,12 @@ func TestContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	// Make a direct HTTP request with cancelled context
+	// Make a direct HTTP request with canceled context
 	req, _ := http.NewRequestWithContext(ctx, "GET", server.URL, nil)
 	_, err := http.DefaultClient.Do(req)
 
 	if err == nil {
-		t.Error("expected error from cancelled context")
+		t.Error("expected error from canceled context")
 	}
 
 	if !errors.Is(err, context.DeadlineExceeded) {

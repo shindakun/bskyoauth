@@ -421,7 +421,7 @@ func TestSecurityHeadersMiddlewareWithOptions(t *testing.T) {
 func TestCustomCSPDirectives(t *testing.T) {
 	opts := &SecurityHeadersOptions{
 		AdditionalCSPDirectives: map[string][]string{
-			"media-src": {"'self'", "https://cdn.example.com"},
+			"media-src":  {"'self'", "https://cdn.example.com"},
 			"worker-src": {"'self'"},
 		},
 	}

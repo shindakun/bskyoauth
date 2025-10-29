@@ -3,8 +3,8 @@ package bskyoauth
 import (
 	"io"
 
-	cbg "github.com/whyrusleeping/cbor-gen"
 	"github.com/ipfs/go-cid"
+	cbg "github.com/whyrusleeping/cbor-gen"
 )
 
 // CustomRecord wraps a map to make it compatible with CBOR marshaling.

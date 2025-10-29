@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # Git pre-commit hook for bskyoauth
-# Runs security checks and tests before allowing commit
+# Runs code quality, security checks, and tests before allowing commit
 #
 # To install: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 # To bypass: git commit --no-verify
@@ -9,6 +9,52 @@
 set -e
 
 echo "🔍 Running pre-commit checks..."
+echo ""
+
+# Check code formatting
+echo "📝 Checking code formatting..."
+UNFORMATTED=$(gofmt -l .)
+if [ -n "$UNFORMATTED" ]; then
+    echo ""
+    echo "❌ Code is not formatted! Please run:"
+    echo "   gofmt -w ."
+    echo ""
+    echo "Unformatted files:"
+    echo "$UNFORMATTED"
+    echo ""
+    echo "To bypass: git commit --no-verify"
+    exit 1
+fi
+echo "✅ Code is properly formatted"
+echo ""
+
+# Check if golangci-lint is installed
+if ! command -v golangci-lint >/dev/null 2>&1; then
+    echo "⚠️  golangci-lint not found. Installing..."
+    go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+    if [ $? -ne 0 ]; then
+        echo "❌ Failed to install golangci-lint"
+        echo "   You can install it manually: https://golangci-lint.run/welcome/install/"
+        echo "   To bypass: git commit --no-verify"
+        exit 1
+    fi
+fi
+
+# Run golangci-lint
+echo "🔎 Running golangci-lint..."
+GOLANGCI_LINT_PATH=$(go env GOPATH)/bin/golangci-lint
+if [ ! -f "$GOLANGCI_LINT_PATH" ]; then
+    GOLANGCI_LINT_PATH="$HOME/go/bin/golangci-lint"
+fi
+
+if ! $GOLANGCI_LINT_PATH run --timeout=5m; then
+    echo ""
+    echo "❌ Linting issues found! Please fix before committing."
+    echo "   Run: golangci-lint run for details"
+    echo "   To bypass: git commit --no-verify"
+    exit 1
+fi
+echo "✅ No linting issues found"
 echo ""
 
 # Check if govulncheck is installed

@@ -213,10 +213,10 @@ func callbackSuccessHandler(w http.ResponseWriter, r *http.Request, sessionID st
 		Name:     "session_id",
 		Value:    sessionID,
 		Path:     "/",
-		HttpOnly: true,                  // Prevents JavaScript access
-		Secure:   isSecure,               // HTTPS only in production
-		SameSite: http.SameSiteLaxMode,   // CSRF protection
-		MaxAge:   2592000,                // 30 days (configurable)
+		HttpOnly: true,                 // Prevents JavaScript access
+		Secure:   isSecure,             // HTTPS only in production
+		SameSite: http.SameSiteLaxMode, // CSRF protection
+		MaxAge:   2592000,              // 30 days (configurable)
 	})
 
 	http.Redirect(w, r, "/", http.StatusFound)
@@ -393,8 +393,8 @@ func logoutHandler(client *bskyoauth.Client) http.HandlerFunc {
 			Path:     "/",
 			MaxAge:   -1,
 			HttpOnly: true,
-			Secure:   isSecure,               // Must match original cookie
-			SameSite: http.SameSiteLaxMode,   // Must match original cookie
+			Secure:   isSecure,             // Must match original cookie
+			SameSite: http.SameSiteLaxMode, // Must match original cookie
 		})
 
 		http.Redirect(w, r, "/", http.StatusFound)

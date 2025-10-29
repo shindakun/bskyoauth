@@ -345,9 +345,9 @@ func TestClientMultipleSessions(t *testing.T) {
 // TestClientURLConstruction verifies URL construction for different base URLs.
 func TestClientURLConstruction(t *testing.T) {
 	testCases := []struct {
-		baseURL           string
-		expectedClientID  string
-		expectedRedirect  string
+		baseURL          string
+		expectedClientID string
+		expectedRedirect string
 	}{
 		{
 			baseURL:          "http://localhost:8181",

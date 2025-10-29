@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"testing"
 
-	cbg "github.com/whyrusleeping/cbor-gen"
 	"github.com/ipfs/go-cid"
+	cbg "github.com/whyrusleeping/cbor-gen"
 )
 
 func TestCustomRecord_MarshalCBOR_EmptyMap(t *testing.T) {
