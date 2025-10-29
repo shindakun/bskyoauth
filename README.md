@@ -86,6 +86,59 @@ client := bskyoauth.NewClientWithOptions(bskyoauth.ClientOptions{
 })
 ```
 
+### Application Type
+
+Configure the OAuth client application type based on your deployment:
+
+```go
+// Web application (default) - for web-based applications
+client := bskyoauth.NewClientWithOptions(bskyoauth.ClientOptions{
+    BaseURL:         "https://myapp.com",
+    ApplicationType: bskyoauth.ApplicationTypeWeb, // or omit for default
+})
+
+// Native application - for desktop/mobile applications
+client := bskyoauth.NewClientWithOptions(bskyoauth.ClientOptions{
+    BaseURL:         "myapp://oauth",
+    ApplicationType: bskyoauth.ApplicationTypeNative,
+})
+```
+
+**Application Type Values:**
+- `ApplicationTypeWeb` (`"web"`) - Default. For web-based applications
+  - Must use HTTPS redirect URIs (except `localhost` for development)
+  - Suitable for server-side web applications
+- `ApplicationTypeNative` (`"native"`) - For native/desktop applications
+  - May use custom URI schemes (e.g., `myapp://oauth`)
+  - May use `http://localhost` redirect URIs
+  - Suitable for desktop, mobile, or CLI applications
+
+**Redirect URI Constraints:**
+
+Web applications should use HTTPS redirect URIs:
+```go
+// ✓ Valid for web applications
+https://myapp.com/callback
+https://localhost:8181/callback  // OK for development
+
+// ✗ Invalid for web applications
+http://myapp.com/callback  // HTTP not allowed (except localhost)
+myapp://callback          // Custom schemes not allowed
+```
+
+Native applications have more flexibility:
+```go
+// ✓ Valid for native applications
+myapp://oauth/callback     // Custom URI scheme
+http://localhost:8181      // Localhost with HTTP
+http://127.0.0.1:8181      // Loopback with HTTP
+
+// ✗ May be rejected by authorization servers
+http://myapp.com/callback  // HTTP to non-localhost
+```
+
+The `application_type` is included in the OAuth client metadata and affects how the authorization server validates your redirect URIs according to [OpenID Connect Dynamic Client Registration](https://openid.net/specs/openid-connect-registration-1_0.html) and the [AT Protocol OAuth specification](https://atproto.com/specs/oauth).
+
 ### Manual OAuth Flow
 
 For more control over the authentication flow:

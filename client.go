@@ -16,6 +16,16 @@ import (
 	"github.com/bluesky-social/indigo/xrpc"
 )
 
+const (
+	// ApplicationTypeWeb indicates a web-based OAuth client.
+	// Web clients must use HTTPS redirect URIs (except localhost for development).
+	ApplicationTypeWeb = "web"
+
+	// ApplicationTypeNative indicates a native/desktop OAuth client.
+	// Native clients may use custom URI schemes or http://localhost redirect URIs.
+	ApplicationTypeNative = "native"
+)
+
 var (
 	// ErrNoSession is returned when no valid session is available
 	ErrNoSession = errors.New("no valid session")
@@ -35,6 +45,9 @@ type Client struct {
 	// ClientName is the display name for the OAuth client
 	ClientName string
 
+	// ApplicationType is the type of OAuth client ("web" or "native")
+	ApplicationType string
+
 	// Scopes are the OAuth scopes to request (defaults to "atproto transition:generic")
 	Scopes []string
 
@@ -49,6 +62,10 @@ type ClientOptions struct {
 
 	// ClientName is the display name for the OAuth client (optional, defaults to "Bluesky OAuth Client")
 	ClientName string
+
+	// ApplicationType is the type of OAuth client (optional, defaults to "web")
+	// Valid values: ApplicationTypeWeb ("web") or ApplicationTypeNative ("native")
+	ApplicationType string
 
 	// Scopes are the OAuth scopes to request (optional, defaults to ["atproto", "transition:generic"])
 	Scopes []string
@@ -82,6 +99,17 @@ func NewClientWithOptions(opts ClientOptions) *Client {
 		opts.SessionStore = NewMemorySessionStore()
 	}
 
+	// Validate and set default ApplicationType
+	if opts.ApplicationType == "" {
+		opts.ApplicationType = ApplicationTypeWeb
+	} else if opts.ApplicationType != ApplicationTypeWeb && opts.ApplicationType != ApplicationTypeNative {
+		// Invalid application type - log warning and default to web
+		Logger.Warn("invalid application_type, defaulting to 'web'",
+			"provided", opts.ApplicationType,
+			"valid_values", []string{ApplicationTypeWeb, ApplicationTypeNative})
+		opts.ApplicationType = ApplicationTypeWeb
+	}
+
 	// Use custom HTTP client if provided
 	if opts.HTTPClient != nil {
 		SetHTTPClient(opts.HTTPClient)
@@ -94,12 +122,13 @@ func NewClientWithOptions(opts ClientOptions) *Client {
 	}
 
 	return &Client{
-		BaseURL:      baseURL,
-		ClientID:     baseURL + "/client-metadata.json",
-		RedirectURI:  baseURL + "/callback",
-		ClientName:   opts.ClientName,
-		Scopes:       opts.Scopes,
-		SessionStore: opts.SessionStore,
+		BaseURL:         baseURL,
+		ClientID:        baseURL + "/client-metadata.json",
+		RedirectURI:     baseURL + "/callback",
+		ClientName:      opts.ClientName,
+		ApplicationType: opts.ApplicationType,
+		Scopes:          opts.Scopes,
+		SessionStore:    opts.SessionStore,
 	}
 }
 
@@ -357,7 +386,7 @@ func (c *Client) GetClientMetadata() map[string]interface{} {
 		"grant_types":                []string{"authorization_code", "refresh_token"},
 		"response_types":             []string{"code"},
 		"token_endpoint_auth_method": "none",
-		"application_type":           "web",
+		"application_type":           c.ApplicationType,
 		"dpop_bound_access_tokens":   true,
 	}
 }

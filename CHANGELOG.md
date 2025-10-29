@@ -23,6 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improves reliability of API calls in high-traffic scenarios
 
 ### Added
+- **Application Type Configuration**: Added support for configuring OAuth `application_type`
+  - New `ApplicationType` field in `ClientOptions` with `ApplicationTypeWeb` and `ApplicationTypeNative` constants
+  - Defaults to `"web"` for backward compatibility
+  - Web applications must use HTTPS redirect URIs (except localhost for development)
+  - Native applications may use custom URI schemes or `http://localhost` redirect URIs
+  - Validates application type and logs warning if invalid value provided
+  - Complies with OpenID Connect Dynamic Client Registration and AT Protocol OAuth specifications
+  - Added comprehensive test coverage with 6 new test cases
+  - Full documentation in README with examples and redirect URI constraints
 - **Documentation**: Added reactive token refresh pattern to README
   - Shows how to handle 401 "invalid_token" errors in API calls
   - Demonstrates automatic refresh and retry pattern

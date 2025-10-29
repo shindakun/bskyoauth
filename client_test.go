@@ -549,3 +549,97 @@ func TestClientSessionStoreIsolation(t *testing.T) {
 		t.Error("Client2 session corrupted")
 	}
 }
+
+// TestApplicationTypeDefault verifies default application_type is "web".
+func TestApplicationTypeDefault(t *testing.T) {
+	client := NewClient("https://example.com")
+
+	if client.ApplicationType != ApplicationTypeWeb {
+		t.Errorf("Expected default ApplicationType to be %q, got %q", ApplicationTypeWeb, client.ApplicationType)
+	}
+
+	metadata := client.GetClientMetadata()
+	if metadata["application_type"] != "web" {
+		t.Errorf("Expected metadata application_type to be 'web', got %v", metadata["application_type"])
+	}
+}
+
+// TestApplicationTypeWeb verifies explicit web application type.
+func TestApplicationTypeWeb(t *testing.T) {
+	client := NewClientWithOptions(ClientOptions{
+		BaseURL:         "https://example.com",
+		ApplicationType: ApplicationTypeWeb,
+	})
+
+	if client.ApplicationType != ApplicationTypeWeb {
+		t.Errorf("Expected ApplicationType to be %q, got %q", ApplicationTypeWeb, client.ApplicationType)
+	}
+
+	metadata := client.GetClientMetadata()
+	if metadata["application_type"] != "web" {
+		t.Errorf("Expected metadata application_type to be 'web', got %v", metadata["application_type"])
+	}
+}
+
+// TestApplicationTypeNative verifies native application type.
+func TestApplicationTypeNative(t *testing.T) {
+	client := NewClientWithOptions(ClientOptions{
+		BaseURL:         "myapp://oauth",
+		ApplicationType: ApplicationTypeNative,
+	})
+
+	if client.ApplicationType != ApplicationTypeNative {
+		t.Errorf("Expected ApplicationType to be %q, got %q", ApplicationTypeNative, client.ApplicationType)
+	}
+
+	metadata := client.GetClientMetadata()
+	if metadata["application_type"] != "native" {
+		t.Errorf("Expected metadata application_type to be 'native', got %v", metadata["application_type"])
+	}
+}
+
+// TestApplicationTypeInvalid verifies invalid application_type defaults to "web" with warning.
+func TestApplicationTypeInvalid(t *testing.T) {
+	client := NewClientWithOptions(ClientOptions{
+		BaseURL:         "https://example.com",
+		ApplicationType: "invalid_type",
+	})
+
+	// Should default to web
+	if client.ApplicationType != ApplicationTypeWeb {
+		t.Errorf("Expected invalid ApplicationType to default to %q, got %q", ApplicationTypeWeb, client.ApplicationType)
+	}
+
+	metadata := client.GetClientMetadata()
+	if metadata["application_type"] != "web" {
+		t.Errorf("Expected metadata application_type to default to 'web', got %v", metadata["application_type"])
+	}
+}
+
+// TestApplicationTypeEmpty verifies empty application_type defaults to "web".
+func TestApplicationTypeEmpty(t *testing.T) {
+	client := NewClientWithOptions(ClientOptions{
+		BaseURL:         "https://example.com",
+		ApplicationType: "",
+	})
+
+	if client.ApplicationType != ApplicationTypeWeb {
+		t.Errorf("Expected empty ApplicationType to default to %q, got %q", ApplicationTypeWeb, client.ApplicationType)
+	}
+
+	metadata := client.GetClientMetadata()
+	if metadata["application_type"] != "web" {
+		t.Errorf("Expected metadata application_type to default to 'web', got %v", metadata["application_type"])
+	}
+}
+
+// TestApplicationTypeConstants verifies constant values.
+func TestApplicationTypeConstants(t *testing.T) {
+	if ApplicationTypeWeb != "web" {
+		t.Errorf("Expected ApplicationTypeWeb constant to be 'web', got %q", ApplicationTypeWeb)
+	}
+
+	if ApplicationTypeNative != "native" {
+		t.Errorf("Expected ApplicationTypeNative constant to be 'native', got %q", ApplicationTypeNative)
+	}
+}
