@@ -2,6 +2,7 @@ package bskyoauth
 
 import (
 	"crypto/ecdsa"
+	"time"
 )
 
 // Session represents an authenticated user session with Bluesky.
@@ -23,6 +24,12 @@ type Session struct {
 
 	// DPoPNonce is the server-provided nonce for DPoP proofs
 	DPoPNonce string
+
+	// AccessTokenExpiresAt is when the access token expires
+	AccessTokenExpiresAt time.Time
+
+	// RefreshTokenExpiresAt is when the refresh token expires (optional, may be zero)
+	RefreshTokenExpiresAt time.Time
 }
 
 // AuthFlowState contains the state information for an OAuth flow.

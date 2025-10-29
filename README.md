@@ -306,6 +306,88 @@ Critical security events are always logged at ERROR level:
 - Token exchange failures
 - Rate limit violations
 
+## Token Refresh
+
+Access tokens expire after a period of time (typically 1-2 hours). Use refresh tokens to obtain new access tokens without requiring the user to re-authenticate.
+
+### Manual Token Refresh
+
+```go
+session, err := client.GetSession(sessionID)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Check if token needs refresh (5 minute safety buffer)
+if session.IsAccessTokenExpired(5 * time.Minute) {
+    newSession, err := client.RefreshToken(ctx, session)
+    if err != nil {
+        // Refresh failed - user needs to re-authenticate
+        return redirectToLogin(w, r)
+    }
+
+    // Update session in store
+    err = client.UpdateSession(sessionID, newSession)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    session = newSession
+}
+
+// Use refreshed session for API calls
+err = client.CreatePost(ctx, session, "Hello from refreshed token!")
+```
+
+### Token Expiration Checking
+
+Check token status before making API calls:
+
+```go
+// Check if access token is expired or will expire soon
+if session.IsAccessTokenExpired(5 * time.Minute) {
+    // Token needs refresh
+}
+
+// Check if refresh token is expired
+if session.IsRefreshTokenExpired() {
+    // Need full re-authentication - redirect to login
+}
+
+// Get time remaining until expiration
+remaining := session.TimeUntilAccessTokenExpiry()
+log.Printf("Token expires in: %v", remaining)
+```
+
+### Error Handling
+
+Refresh tokens can expire or become invalid. Handle refresh failures gracefully:
+
+```go
+newSession, err := client.RefreshToken(ctx, session)
+if err != nil {
+    // Common reasons for failure:
+    // - Refresh token expired
+    // - Refresh token revoked
+    // - Network error
+    // - PDS unavailable
+
+    // User needs to re-authenticate
+    log.Printf("Token refresh failed: %v", err)
+    return redirectToLogin(w, r)
+}
+
+// Success - update session
+client.UpdateSession(sessionID, newSession)
+```
+
+### Important Notes
+
+- **Single-Use Tokens**: Per AT Protocol spec, refresh tokens are single-use. The old refresh token becomes invalid after a successful refresh.
+- **DPoP Binding**: Token refresh maintains the same DPoP key binding as the original authentication.
+- **Automatic Expiration**: The library tracks token expiration times when available from the server.
+- **No Expiration Data**: If the server doesn't provide expiration times, the helper methods assume tokens are valid.
+
 ## Example Application
 
 A complete web application example is available in [examples/web-demo](examples/web-demo/main.go).

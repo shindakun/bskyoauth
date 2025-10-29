@@ -13,18 +13,7 @@ This security audit identified multiple areas for improvement in the bskyoauth l
 
 ## Medium Priority Issues
 
-### 12. Refresh Token Not Implemented
-**File:** [oauth.go:218](oauth.go#L218)
-
-**Issue:** Refresh token is stored but never used. Access tokens will expire requiring full re-authentication.
-
-**Recommendation:**
-- Implement token refresh logic
-- Add automatic refresh before expiration
-- Handle refresh token expiration gracefully
-- Provide clear user experience for token refresh failures
-
-**Impact:** Improves user experience and security (shorter-lived access tokens).
+*No medium priority issues remain.*
 
 ---
 
@@ -607,3 +596,68 @@ session, err := client.CompleteAuthFlow(ctx, code, state, iss)
 ```
 
 **Impact:** Enables security incident detection and investigation. Provides request correlation through IDs. Environment-aware configuration for development and production. Zero external dependencies using Go standard library.
+
+---
+
+### 12. Refresh Token Not Implemented ✅ **COMPLETED**
+**Files:** oauth.go, types.go, client.go, token_test.go
+
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) for details
+
+**Issue:** Refresh token is stored but never used. Access tokens will expire requiring full re-authentication.
+
+**Implementation:**
+- ✅ Added `RefreshToken()` method to exchange refresh tokens for new access tokens
+- ✅ Added token expiration tracking to `Session` struct:
+  - `AccessTokenExpiresAt time.Time` - When access token expires
+  - `RefreshTokenExpiresAt time.Time` - When refresh token expires (optional)
+- ✅ Token expiration automatically parsed from OAuth token responses in `CompleteAuthFlow()`
+- ✅ Added token expiration helper methods:
+  - `IsAccessTokenExpired(buffer time.Duration)` - Check if token expired or will expire soon
+  - `IsRefreshTokenExpired()` - Check if refresh token expired
+  - `TimeUntilAccessTokenExpiry()` - Get duration until expiration
+- ✅ Added `UpdateSession()` method to update sessions after refresh
+- ✅ DPoP binding maintained across token refresh (same DPoP key used)
+- ✅ Single-use refresh tokens per AT Protocol spec (old token invalidated after use)
+- ✅ Added `refreshTokenRequest()` helper with DPoP nonce retry support
+- ✅ Comprehensive logging throughout refresh process:
+  - Token expiration parsing
+  - Refresh initiation and completion
+  - Error conditions (no token, expired token, network errors)
+- ✅ 6 new test cases in token_test.go:
+  - `TestIsAccessTokenExpired` (5 sub-cases)
+  - `TestIsRefreshTokenExpired` (3 sub-cases)
+  - `TestTimeUntilAccessTokenExpiry` (3 sub-cases)
+  - `TestUpdateSession`
+  - `TestRefreshToken_NoRefreshToken`
+  - `TestRefreshToken_ExpiredRefreshToken`
+- ✅ Full documentation in README with examples
+- ✅ Zero breaking changes - all additions backwards compatible
+
+**Key Features:**
+- **Manual Refresh**: Call `RefreshToken()` when tokens expire
+- **Expiration Checking**: Helper methods to check token status
+- **Error Handling**: Clear errors for expired/missing tokens
+- **AT Protocol Compliance**: Single-use tokens, DPoP binding maintained
+- **Flexible**: No expiration data? Methods assume tokens valid
+
+**Example Usage:**
+```go
+// Check if token needs refresh
+if session.IsAccessTokenExpired(5 * time.Minute) {
+    newSession, err := client.RefreshToken(ctx, session)
+    if err != nil {
+        // Refresh failed - redirect to login
+        return redirectToLogin(w, r)
+    }
+    
+    // Update session in store
+    client.UpdateSession(sessionID, newSession)
+    session = newSession
+}
+
+// Use refreshed session
+client.CreatePost(ctx, session, "Hello!")
+```
+
+**Impact:** Users no longer need to re-authenticate when access tokens expire. Improves user experience and enables shorter-lived access tokens for better security.

@@ -461,3 +461,41 @@ func (c *Client) GetSession(sessionID string) (*Session, error) {
 func (c *Client) DeleteSession(sessionID string) error {
 	return c.SessionStore.Delete(sessionID)
 }
+
+// UpdateSession updates an existing session with new tokens after refresh.
+// This is typically used after calling RefreshToken to persist the new tokens.
+func (c *Client) UpdateSession(sessionID string, newSession *Session) error {
+	return c.SessionStore.Set(sessionID, newSession)
+}
+
+// IsAccessTokenExpired checks if the access token has expired or will expire soon.
+// The buffer parameter adds a safety margin (e.g., 5 minutes) to refresh before actual expiration.
+// Returns false if no expiration info is available (assumes valid).
+func (s *Session) IsAccessTokenExpired(buffer time.Duration) bool {
+	if s.AccessTokenExpiresAt.IsZero() {
+		return false // No expiration info, assume valid
+	}
+	return time.Now().Add(buffer).After(s.AccessTokenExpiresAt)
+}
+
+// IsRefreshTokenExpired checks if the refresh token has expired.
+// Returns false if no expiration info is available (assumes valid).
+func (s *Session) IsRefreshTokenExpired() bool {
+	if s.RefreshTokenExpiresAt.IsZero() {
+		return false // No expiration info, assume valid
+	}
+	return time.Now().After(s.RefreshTokenExpiresAt)
+}
+
+// TimeUntilAccessTokenExpiry returns duration until access token expires.
+// Returns 0 if already expired or no expiration info available.
+func (s *Session) TimeUntilAccessTokenExpiry() time.Duration {
+	if s.AccessTokenExpiresAt.IsZero() {
+		return 0
+	}
+	remaining := time.Until(s.AccessTokenExpiresAt)
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
+}

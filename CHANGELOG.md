@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Token Refresh Support**: Implemented refresh token functionality (Issue #12)
+  - Added `RefreshToken()` method to exchange refresh tokens for new access tokens
+  - Added token expiration tracking to `Session` struct with `AccessTokenExpiresAt` and `RefreshTokenExpiresAt` fields
+  - Token expiration is automatically parsed from OAuth token responses
+  - Added helper methods: `IsAccessTokenExpired()`, `IsRefreshTokenExpired()`, `TimeUntilAccessTokenExpiry()`
+  - Added `UpdateSession()` method to update sessions after refresh
+  - DPoP binding maintained across token refresh per AT Protocol spec
+  - Single-use refresh tokens per AT Protocol spec (old refresh token invalidated after use)
+  - Comprehensive logging for refresh operations (success, failures, expiration)
+  - Added `refreshTokenRequest()` helper with DPoP nonce retry support
+  - 6 new test cases for token expiration and refresh functionality
+  - Full documentation in README with examples and error handling
+  - Client metadata already includes `refresh_token` grant type
+  - Zero breaking changes - all additions backwards compatible
 - **Structured Logging**: Added comprehensive structured logging using Go's standard `log/slog`
   - Environment-based configuration (Info for localhost, Error for production)
   - Silent by default (logs to `io.Discard` unless configured)
