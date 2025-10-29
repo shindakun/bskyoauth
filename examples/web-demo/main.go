@@ -96,7 +96,7 @@ func homeHandler(client *bskyoauth.Client) http.HandlerFunc {
 		<button type="submit">Post to Bluesky</button>
 	</form>
 	<br>
-	<h2>club.ongaku.prototype</h2>
+	<h2>com.demo.bskyoauth</h2>
 	<form action="/create-ongaku" method="post">
 		<textarea name="text" rows="4" cols="50" placeholder="Ongaku prototype text..."></textarea><br>
 		<button type="submit">Create Ongaku Record</button>
@@ -257,13 +257,13 @@ func createOngakuHandler(client *bskyoauth.Client) http.HandlerFunc {
 			"createdAt": time.Now().Format(time.RFC3339),
 		}
 
-		output, err := client.CreateRecord(r.Context(), session, "club.ongaku.prototype", record)
+		output, err := client.CreateRecord(r.Context(), session, "com.demo.bskyoauth", record)
 		if err != nil {
 			http.Error(w, "Failed to create record: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		log.Printf("Created club.ongaku.prototype record: %s", output.Uri)
+		log.Printf("Created com.demo.bskyoauth record: %s", output.Uri)
 		http.Redirect(w, r, "/", http.StatusFound)
 	}
 }
@@ -293,13 +293,13 @@ func deleteOngakuHandler(client *bskyoauth.Client) http.HandlerFunc {
 			return
 		}
 
-		err = client.DeleteRecord(r.Context(), session, "club.ongaku.prototype", rkey)
+		err = client.DeleteRecord(r.Context(), session, "com.demo.bskyoauth", rkey)
 		if err != nil {
 			http.Error(w, "Failed to delete record: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		log.Printf("Deleted club.ongaku.prototype record with rkey: %s", rkey)
+		log.Printf("Deleted com.demo.bskyoauth record with rkey: %s", rkey)
 		http.Redirect(w, r, "/", http.StatusFound)
 	}
 }
