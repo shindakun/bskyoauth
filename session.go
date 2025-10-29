@@ -6,15 +6,6 @@ import (
 	"github.com/shindakun/bskyoauth/internal/session"
 )
 
-// Re-export session-related errors for backward compatibility
-var (
-	// ErrSessionNotFound is returned when a session ID doesn't exist
-	ErrSessionNotFound = session.ErrSessionNotFound
-
-	// ErrInvalidSession is returned when a session is invalid or expired
-	ErrInvalidSession = session.ErrInvalidSession
-)
-
 // MemorySessionStore is an in-memory implementation of SessionStore with automatic expiration.
 // This is a wrapper around internal/session.MemoryStore to maintain backward compatibility.
 type MemorySessionStore struct {

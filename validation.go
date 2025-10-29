@@ -4,26 +4,6 @@ import (
 	"github.com/shindakun/bskyoauth/internal/validation"
 )
 
-// Re-export validation error types for backward compatibility
-var (
-	ErrHandleInvalid      = validation.ErrHandleInvalid
-	ErrHandleTooLong      = validation.ErrHandleTooLong
-	ErrTextEmpty          = validation.ErrTextEmpty
-	ErrTextTooLong        = validation.ErrTextTooLong
-	ErrInvalidUTF8        = validation.ErrInvalidUTF8
-	ErrNullByte           = validation.ErrNullByte
-	ErrRecordFieldInvalid = validation.ErrRecordFieldInvalid
-	ErrInvalidDatetime    = validation.ErrInvalidDatetime
-	ErrInvalidCollection  = validation.ErrInvalidCollection
-)
-
-// Re-export validation constants for backward compatibility
-const (
-	MaxPostTextLength      = validation.MaxPostTextLength
-	MaxHandleLength        = validation.MaxHandleLength
-	MaxHandleSegmentLength = validation.MaxHandleSegmentLength
-)
-
 // ValidateHandle validates a Bluesky handle against AT Protocol specifications.
 // Handles must be valid domain names with specific constraints:
 // - Maximum 253 characters total

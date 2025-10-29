@@ -92,13 +92,6 @@ func NewLoggerFromEnv(baseURL string) *slog.Logger {
 // contextKey type for context values
 type contextKey string
 
-const (
-	// ContextKeyRequestID is the context key for request IDs
-	ContextKeyRequestID contextKey = "request_id"
-	// ContextKeySessionID is the context key for session IDs
-	ContextKeySessionID contextKey = "session_id"
-)
-
 // WithRequestID adds a request ID to the context for correlation.
 func WithRequestID(ctx context.Context, requestID string) context.Context {
 	return context.WithValue(ctx, ContextKeyRequestID, requestID)

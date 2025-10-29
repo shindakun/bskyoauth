@@ -23,21 +23,6 @@ import (
 )
 
 var (
-	// ErrInvalidHandle is returned when the handle cannot be parsed or resolved
-	ErrInvalidHandle = errors.New("invalid handle")
-
-	// ErrInvalidState is returned when the OAuth state parameter is invalid
-	ErrInvalidState = errors.New("invalid state parameter")
-
-	// ErrTokenExchange is returned when token exchange fails
-	ErrTokenExchange = errors.New("token exchange failed")
-
-	// ErrNoAccessToken is returned when no access token is received
-	ErrNoAccessToken = errors.New("no access token in response")
-
-	// ErrIssuerMismatch is returned when the callback issuer doesn't match the expected authorization server
-	ErrIssuerMismatch = errors.New("issuer mismatch: potential authorization code injection attack")
-
 	// defaultHTTPClient is the HTTP client used for OAuth and API requests.
 	// Configurable via SetHTTPClient() for testing or custom configurations.
 	defaultHTTPClient = &http.Client{

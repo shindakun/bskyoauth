@@ -3,7 +3,6 @@ package bskyoauth
 import (
 	"context"
 	"crypto/ecdsa"
-	"errors"
 	"net/http"
 	"time"
 
@@ -11,21 +10,6 @@ import (
 
 	"github.com/shindakun/bskyoauth/internal/api"
 	internalhttp "github.com/shindakun/bskyoauth/internal/http"
-)
-
-const (
-	// ApplicationTypeWeb indicates a web-based OAuth client.
-	// Web clients must use HTTPS redirect URIs (except localhost for development).
-	ApplicationTypeWeb = "web"
-
-	// ApplicationTypeNative indicates a native/desktop OAuth client.
-	// Native clients may use custom URI schemes or http://localhost redirect URIs.
-	ApplicationTypeNative = "native"
-)
-
-var (
-	// ErrNoSession is returned when no valid session is available
-	ErrNoSession = errors.New("no valid session")
 )
 
 // Client is the main entry point for the Bluesky OAuth library.
