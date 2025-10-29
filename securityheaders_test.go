@@ -148,7 +148,8 @@ func TestSecurityHeadersMiddleware_ProductionHTTPS(t *testing.T) {
 
 // TestGetLocalhostCSP tests localhost CSP policy
 func TestGetLocalhostCSP(t *testing.T) {
-	csp := getLocalhostCSP()
+	opts := getDefaultLocalhostOptions()
+	csp := buildCSP(opts)
 
 	// Check for key localhost features
 	if !strings.Contains(csp, "'unsafe-inline'") {
@@ -174,7 +175,8 @@ func TestGetLocalhostCSP(t *testing.T) {
 
 // TestGetProductionCSP tests production CSP policy
 func TestGetProductionCSP(t *testing.T) {
-	csp := getProductionCSP()
+	opts := getDefaultProductionOptions()
+	csp := buildCSP(opts)
 
 	// Check that unsafe directives are NOT present
 	if strings.Contains(csp, "'unsafe-inline'") {
@@ -329,5 +331,284 @@ func TestSecurityHeaders_ContentTypeOptions(t *testing.T) {
 				t.Errorf("X-Content-Type-Options should be nosniff for %s, got: %q", tt.name, w.Header().Get("X-Content-Type-Options"))
 			}
 		})
+	}
+}
+
+// TestBlueskyDomainsInCSP tests that Bluesky domains are included in CSP
+func TestBlueskyDomainsInCSP(t *testing.T) {
+	tests := []struct {
+		name string
+		host string
+	}{
+		{"localhost", "localhost:8080"},
+		{"production", "example.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := SecurityHeadersMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			req := httptest.NewRequest("GET", "/", nil)
+			req.Host = tt.host
+			w := httptest.NewRecorder()
+
+			handler.ServeHTTP(w, req)
+
+			csp := w.Header().Get("Content-Security-Policy")
+			if !strings.Contains(csp, "https://*.bsky.social") {
+				t.Errorf("CSP should contain https://*.bsky.social for %s, got: %q", tt.name, csp)
+			}
+			if !strings.Contains(csp, "https://bsky.social") {
+				t.Errorf("CSP should contain https://bsky.social for %s, got: %q", tt.name, csp)
+			}
+		})
+	}
+}
+
+// TestFormActionIncludesBluesky tests that form-action includes Bluesky domains
+func TestFormActionIncludesBluesky(t *testing.T) {
+	handler := SecurityHeadersMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Host = "example.com"
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	csp := w.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "form-action") {
+		t.Fatalf("CSP should contain form-action directive, got: %q", csp)
+	}
+	if !strings.Contains(csp, "form-action 'self' https://*.bsky.social https://bsky.social") {
+		t.Errorf("form-action should include Bluesky domains, got: %q", csp)
+	}
+}
+
+// TestSecurityHeadersMiddlewareWithOptions tests custom options
+func TestSecurityHeadersMiddlewareWithOptions(t *testing.T) {
+	opts := &SecurityHeadersOptions{
+		CSPConnectSrc: []string{"'self'", "https://api.example.com"},
+		CustomHeaders: map[string]string{"X-Custom-Header": "test-value"},
+	}
+
+	handler := SecurityHeadersMiddlewareWithOptions(opts)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Host = "example.com"
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	// Check custom connect-src
+	csp := w.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "https://api.example.com") {
+		t.Errorf("CSP should contain custom connect-src, got: %q", csp)
+	}
+
+	// Check custom header
+	if w.Header().Get("X-Custom-Header") != "test-value" {
+		t.Errorf("Expected X-Custom-Header: test-value, got: %q", w.Header().Get("X-Custom-Header"))
+	}
+}
+
+// TestCustomCSPDirectives tests additional CSP directives
+func TestCustomCSPDirectives(t *testing.T) {
+	opts := &SecurityHeadersOptions{
+		AdditionalCSPDirectives: map[string][]string{
+			"media-src": {"'self'", "https://cdn.example.com"},
+			"worker-src": {"'self'"},
+		},
+	}
+
+	handler := SecurityHeadersMiddlewareWithOptions(opts)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Host = "example.com"
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	csp := w.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "media-src 'self' https://cdn.example.com") {
+		t.Errorf("CSP should contain custom media-src directive, got: %q", csp)
+	}
+	if !strings.Contains(csp, "worker-src 'self'") {
+		t.Errorf("CSP should contain custom worker-src directive, got: %q", csp)
+	}
+}
+
+// TestDisableXFrameOptions tests disabling X-Frame-Options
+func TestDisableXFrameOptions(t *testing.T) {
+	opts := &SecurityHeadersOptions{
+		DisableXFrameOptions: true,
+	}
+
+	handler := SecurityHeadersMiddlewareWithOptions(opts)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Host = "example.com"
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Header().Get("X-Frame-Options") != "" {
+		t.Errorf("X-Frame-Options should be empty when disabled, got: %q", w.Header().Get("X-Frame-Options"))
+	}
+}
+
+// TestDisableHSTS tests disabling HSTS
+func TestDisableHSTS(t *testing.T) {
+	opts := &SecurityHeadersOptions{
+		DisableHSTS: true,
+	}
+
+	handler := SecurityHeadersMiddlewareWithOptions(opts)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Host = "example.com"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Header().Get("Strict-Transport-Security") != "" {
+		t.Errorf("HSTS should be empty when disabled, got: %q", w.Header().Get("Strict-Transport-Security"))
+	}
+}
+
+// TestMergeOptions tests option merging logic
+func TestMergeOptions(t *testing.T) {
+	defaults := &SecurityHeadersOptions{
+		CSPDefaultSrc: []string{"'self'"},
+		CSPScriptSrc:  []string{"'self'"},
+		CSPConnectSrc: []string{"'self'", "https://default.com"},
+	}
+
+	user := &SecurityHeadersOptions{
+		CSPConnectSrc: []string{"'self'", "https://custom.com"},
+		CustomHeaders: map[string]string{"X-Custom": "value"},
+	}
+
+	merged := mergeOptions(defaults, user)
+
+	// User options should override
+	if len(merged.CSPConnectSrc) != 2 || merged.CSPConnectSrc[1] != "https://custom.com" {
+		t.Errorf("Expected custom connect-src, got: %v", merged.CSPConnectSrc)
+	}
+
+	// Default options should remain for non-overridden fields
+	if len(merged.CSPDefaultSrc) != 1 || merged.CSPDefaultSrc[0] != "'self'" {
+		t.Errorf("Expected default-src to remain, got: %v", merged.CSPDefaultSrc)
+	}
+
+	// Custom headers should be added
+	if merged.CustomHeaders["X-Custom"] != "value" {
+		t.Errorf("Expected custom header, got: %v", merged.CustomHeaders)
+	}
+}
+
+// TestBuildCSP tests CSP string generation
+func TestBuildCSP(t *testing.T) {
+	opts := &SecurityHeadersOptions{
+		CSPDefaultSrc: []string{"'self'"},
+		CSPScriptSrc:  []string{"'self'", "'unsafe-inline'"},
+		CSPConnectSrc: []string{"'self'", "https://api.example.com"},
+		AdditionalCSPDirectives: map[string][]string{
+			"frame-ancestors": {"'none'"},
+		},
+	}
+
+	csp := buildCSP(opts)
+
+	if !strings.Contains(csp, "default-src 'self'") {
+		t.Errorf("CSP should contain default-src, got: %q", csp)
+	}
+	if !strings.Contains(csp, "script-src 'self' 'unsafe-inline'") {
+		t.Errorf("CSP should contain script-src, got: %q", csp)
+	}
+	if !strings.Contains(csp, "connect-src 'self' https://api.example.com") {
+		t.Errorf("CSP should contain connect-src, got: %q", csp)
+	}
+	if !strings.Contains(csp, "frame-ancestors 'none'") {
+		t.Errorf("CSP should contain frame-ancestors, got: %q", csp)
+	}
+}
+
+// TestLocalhostVsProductionCSP tests different CSP for localhost vs production
+func TestLocalhostVsProductionCSP(t *testing.T) {
+	handler := SecurityHeadersMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// Test localhost
+	reqLocal := httptest.NewRequest("GET", "/", nil)
+	reqLocal.Host = "localhost:8080"
+	wLocal := httptest.NewRecorder()
+	handler.ServeHTTP(wLocal, reqLocal)
+	cspLocal := wLocal.Header().Get("Content-Security-Policy")
+
+	// Test production
+	reqProd := httptest.NewRequest("GET", "/", nil)
+	reqProd.Host = "example.com"
+	wProd := httptest.NewRecorder()
+	handler.ServeHTTP(wProd, reqProd)
+	cspProd := wProd.Header().Get("Content-Security-Policy")
+
+	// Localhost should have unsafe directives
+	if !strings.Contains(cspLocal, "'unsafe-inline'") {
+		t.Errorf("Localhost CSP should contain 'unsafe-inline', got: %q", cspLocal)
+	}
+	if !strings.Contains(cspLocal, "'unsafe-eval'") {
+		t.Errorf("Localhost CSP should contain 'unsafe-eval', got: %q", cspLocal)
+	}
+
+	// Production should NOT have unsafe directives in script-src
+	// (except in other directives like style-src which we don't check here)
+	if strings.Contains(cspProd, "script-src 'self' 'unsafe-inline'") || strings.Contains(cspProd, "script-src 'self' 'unsafe-eval'") {
+		t.Errorf("Production CSP script-src should not contain unsafe directives, got: %q", cspProd)
+	}
+
+	// Production should have frame-ancestors
+	if !strings.Contains(cspProd, "frame-ancestors") {
+		t.Errorf("Production CSP should contain frame-ancestors, got: %q", cspProd)
+	}
+
+	// Localhost should NOT have frame-ancestors
+	if strings.Contains(cspLocal, "frame-ancestors") {
+		t.Errorf("Localhost CSP should not contain frame-ancestors, got: %q", cspLocal)
+	}
+}
+
+// TestCustomFormAction tests custom form-action directive
+func TestCustomFormAction(t *testing.T) {
+	opts := &SecurityHeadersOptions{
+		CSPFormAction: []string{"'self'", "https://forms.example.com"},
+	}
+
+	handler := SecurityHeadersMiddlewareWithOptions(opts)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Host = "example.com"
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	csp := w.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "form-action 'self' https://forms.example.com") {
+		t.Errorf("CSP should contain custom form-action, got: %q", csp)
 	}
 }

@@ -309,20 +309,72 @@ if err := bskyoauth.ValidateCollectionNSID("app.bsky.feed.post"); err != nil {
 
 ### Security Headers
 
-The library includes automatic security headers middleware that can be applied to your HTTP handlers:
+The library includes automatic security headers middleware with built-in support for Bluesky API integration.
+
+**Basic Usage (includes Bluesky domains automatically):**
 
 ```go
-// Simply wrap your handler
 mux := http.NewServeMux()
 // ... set up handlers ...
 handler := bskyoauth.SecurityHeadersMiddleware()(mux)
 http.ListenAndServe(":8080", handler)
 ```
 
-**Automatic Behavior:**
-- **Localhost**: Relaxed CSP with `'unsafe-inline'` and `'unsafe-eval'` for easy development
-- **Production**: Strict CSP with no `'unsafe-inline'` or `'unsafe-eval'`, includes `frame-ancestors 'none'`
-- **HSTS**: Automatically enabled for HTTPS in production (never set for localhost)
+**Custom Options:**
+
+```go
+opts := &bskyoauth.SecurityHeadersOptions{
+    // Add additional API domains
+    CSPConnectSrc: []string{
+        "'self'",
+        "https://*.bsky.social",      // Already included by default
+        "https://api.myservice.com",  // Custom domain
+    },
+
+    // Add custom headers
+    CustomHeaders: map[string]string{
+        "X-Custom-Header": "value",
+    },
+
+    // Add additional CSP directives
+    AdditionalCSPDirectives: map[string][]string{
+        "media-src":  {"'self'", "https://cdn.example.com"},
+        "worker-src": {"'self'"},
+    },
+}
+
+handler := bskyoauth.SecurityHeadersMiddlewareWithOptions(opts)(mux)
+http.ListenAndServe(":8080", handler)
+```
+
+**Default CSP Policies:**
+
+**Localhost:**
+- `default-src 'self'`
+- `script-src 'self' 'unsafe-inline' 'unsafe-eval'` (for hot-reload)
+- `style-src 'self' 'unsafe-inline'`
+- `img-src 'self' data:`
+- `connect-src 'self' https://*.bsky.social https://bsky.social`
+- `form-action 'self' https://*.bsky.social https://bsky.social`
+
+**Production:**
+- `default-src 'self'`
+- `script-src 'self'` (strict - no unsafe directives)
+- `style-src 'self'`
+- `img-src 'self' data:`
+- `connect-src 'self' https://*.bsky.social https://bsky.social`
+- `form-action 'self' https://*.bsky.social https://bsky.social`
+- `frame-ancestors 'none'`
+- `base-uri 'self'`
+
+**Bluesky Integration:**
+
+The default CSP automatically includes Bluesky domains in both `connect-src` and `form-action`, allowing:
+- HTML forms to POST directly to Bluesky API endpoints
+- Client-side JavaScript API calls to Bluesky servers
+- Wildcard `*.bsky.social` supports user-specific PDS domains
+
+**Note:** Server-side Go HTTP requests (current implementation) are NOT affected by CSP. The CSP enables browser-based form submissions and API calls to Bluesky.
 
 **Headers Applied:**
 - **Content-Security-Policy**: Environment-aware (relaxed for localhost, strict for production)
