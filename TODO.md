@@ -7,39 +7,7 @@ This security audit identified multiple areas for improvement in the bskyoauth l
 
 ## Critical Priority Issues
 
-### 7. JWT Token Validation - NOT APPLICABLE ⚠️
-**File:** [oauth.go:292-315](oauth.go#L292-L315)
-
-**Status:** NOT REQUIRED per AT Protocol OAuth Specification
-
-**Original Issue:** Access token JWT is parsed but not validated:
-- No signature verification
-- No expiration check
-- No issuer validation
-- Trusts token claims without verification
-
-**Resolution:**
-Per the [AT Protocol OAuth specification](https://atproto.com/specs/oauth), **access tokens are intentionally opaque from the client's perspective**. The spec states:
-
-> "Access tokens are used to authorize client requests to the account's PDS ('Resource Server'). From the standpoint of the client they are opaque, but they are often signed JWTs including an expiration time."
-
-**Why JWT validation is NOT performed:**
-1. **Spec Compliance**: AT Protocol explicitly requires clients to treat tokens as opaque
-2. **Server-Side Validation**: Token validation is the responsibility of the Resource Server (PDS), not the client
-3. **DPoP Security**: Token security is provided through DPoP (Demonstrating Proof-of-Possession) binding
-4. **Automatic Validation**: Tokens are validated by the PDS on first use anyway
-
-**Current Implementation:**
-- Access tokens treated as opaque strings per spec
-- JWT parsing only used to extract DID for session management
-- Fallback to OAuth state DID if token parsing fails
-- No signature verification or claim validation performed
-
-**Available Resources:**
-- jwt.go and jwt_test.go remain in codebase for reference or custom implementations
-- Full JWT validation example code available if needed for other purposes
-
-**Impact:** This is the CORRECT behavior per AT Protocol specification. Client-side JWT validation would be redundant and against spec.
+*No critical priority issues remain.*
 
 ---
 
@@ -254,6 +222,46 @@ Document these recommendations for library users:
 - Consider engaging professional security audit for production use
 
 Generated: 2025-10-27
+
+---
+
+## NOT APPLICABLE ISSUES
+
+These issues were identified during the security audit but are not applicable due to specification requirements or architectural decisions.
+
+### 7. JWT Token Validation ⚠️ **NOT APPLICABLE**
+**File:** [oauth.go:292-315](oauth.go#L292-L315)
+
+**Status:** NOT REQUIRED per AT Protocol OAuth Specification
+
+**Original Issue:** Access token JWT is parsed but not validated:
+- No signature verification
+- No expiration check
+- No issuer validation
+- Trusts token claims without verification
+
+**Resolution:**
+Per the [AT Protocol OAuth specification](https://atproto.com/specs/oauth), **access tokens are intentionally opaque from the client's perspective**. The spec states:
+
+> "Access tokens are used to authorize client requests to the account's PDS ('Resource Server'). From the standpoint of the client they are opaque, but they are often signed JWTs including an expiration time."
+
+**Why JWT validation is NOT performed:**
+1. **Spec Compliance**: AT Protocol explicitly requires clients to treat tokens as opaque
+2. **Server-Side Validation**: Token validation is the responsibility of the Resource Server (PDS), not the client
+3. **DPoP Security**: Token security is provided through DPoP (Demonstrating Proof-of-Possession) binding
+4. **Automatic Validation**: Tokens are validated by the PDS on first use anyway
+
+**Current Implementation:**
+- Access tokens treated as opaque strings per spec
+- JWT parsing only used to extract DID for session management
+- Fallback to OAuth state DID if token parsing fails
+- No signature verification or claim validation performed
+
+**Available Resources:**
+- jwt.go and jwt_test.go remain in codebase for reference or custom implementations
+- Full JWT validation example code available if needed for other purposes
+
+**Impact:** This is the CORRECT behavior per AT Protocol specification. Client-side JWT validation would be redundant and against spec.
 
 ---
 
