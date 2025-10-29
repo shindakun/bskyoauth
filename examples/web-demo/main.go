@@ -80,8 +80,20 @@ func main() {
 	log.Println("  - Auth endpoints: 5 req/s (burst: 10)")
 	log.Println("  - API endpoints: 10 req/s (burst: 20)")
 	log.Println("✓ Security headers enabled (auto-detects localhost)")
-	log.Println("✓ HTTP timeouts configured: 30s total request timeout")
-	log.Fatal(http.ListenAndServe(":8181", handler))
+	log.Println("✓ HTTP timeouts configured:")
+	log.Println("  - Client requests: 30s total timeout")
+	log.Println("  - Server read: 15s, write: 15s, idle: 60s")
+
+	// Configure HTTP server with timeouts to prevent resource exhaustion attacks
+	server := &http.Server{
+		Addr:         ":8181",
+		Handler:      handler,
+		ReadTimeout:  15 * time.Second, // Time to read request headers and body
+		WriteTimeout: 15 * time.Second, // Time to write response
+		IdleTimeout:  60 * time.Second, // Time to wait for next request when keep-alive is enabled
+	}
+
+	log.Fatal(server.ListenAndServe())
 }
 
 // checkAndRefreshToken checks if the access token is expired and refreshes it if needed.
@@ -158,7 +170,9 @@ func homeHandler(client *bskyoauth.Client) http.HandlerFunc {
 
 		html += `</body></html>`
 		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte(html))
+		if _, err := w.Write([]byte(html)); err != nil {
+			log.Printf("Error writing response: %v", err)
+		}
 	}
 }
 
@@ -376,7 +390,9 @@ func logoutHandler(client *bskyoauth.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID, err := r.Cookie("session_id")
 		if err == nil {
-			client.DeleteSession(sessionID.Value)
+			if err := client.DeleteSession(sessionID.Value); err != nil {
+				log.Printf("Error deleting session %s: %v", sessionID.Value, err)
+			}
 		}
 
 		// Determine if we're running in secure mode (HTTPS)
