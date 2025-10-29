@@ -28,15 +28,12 @@ linters-settings:
   errcheck:
     # Report about not checking of errors in type assertions: `a := b.(MyStruct)`
     check-type-assertions: false
-    # Report about assignment of errors to blank identifier: `_ = err`
-    check-blank: false
     # Exclude these functions from error checking
     exclude-functions:
       - (github.com/shindakun/bskyoauth/vendor/github.com/whyrusleeping/cbor-gen.WriteMajorTypeHeader)
       - (*encoding/json.Encoder).Encode
       - (io.ReadCloser).Close
       - (crypto/rand.Read)
-      - rand.Read
 
   govet:
     # Enable all analyzers
