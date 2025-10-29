@@ -389,3 +389,61 @@ func mergeOptions(defaults, user *SecurityHeadersOptions) *SecurityHeadersOption
 
 	return &merged
 }
+
+// LoggingMiddleware returns middleware that logs HTTP requests and responses.
+// It logs the HTTP method, path, status code, duration, and remote address.
+//
+// Usage:
+//
+//	logger := LoggerFromContext(ctx)
+//	loggerGetter := func(r *http.Request) Logger {
+//	    return LoggerFromContext(r.Context())
+//	}
+//	mux := http.NewServeMux()
+//	// ... set up handlers ...
+//	handler := LoggingMiddleware(loggerGetter)(mux)
+//	http.ListenAndServe(":8080", handler)
+func LoggingMiddleware(loggerGetter func(*http.Request) Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			logger := loggerGetter(r)
+
+			// Create a response writer wrapper to capture status code
+			wrapped := &responseWriter{
+				ResponseWriter: w,
+				statusCode:     http.StatusOK, // Default status
+			}
+
+			// Log request start
+			logger.Info("http request started",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"remote_addr", r.RemoteAddr)
+
+			// Call next handler
+			next.ServeHTTP(wrapped, r)
+
+			// Log request completion
+			duration := time.Since(start)
+			logger.Info("http request completed",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"status", wrapped.statusCode,
+				"duration_ms", duration.Milliseconds(),
+				"remote_addr", r.RemoteAddr)
+		})
+	}
+}
+
+// responseWriter wraps http.ResponseWriter to capture the status code
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+// WriteHeader captures the status code and calls the underlying WriteHeader
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
