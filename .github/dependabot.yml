@@ -1,0 +1,36 @@
+# Dependabot configuration for automated dependency updates
+# See: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # Monitor Go module dependencies
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Los_Angeles"
+    # Keep pull requests manageable
+    open-pull-requests-limit: 5
+    # Group patch and minor updates together
+    groups:
+      dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    # Automatically rebase PRs when they conflict
+    rebase-strategy: "auto"
+    # Add labels to PRs
+    labels:
+      - "dependencies"
+      - "go"
+    # Review assignment (optional - update with your GitHub username)
+    # reviewers:
+    #   - "shindakun"
+    # Commit message prefix
+    commit-message:
+      prefix: "deps"
+      include: "scope"
