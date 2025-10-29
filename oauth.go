@@ -13,11 +13,12 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
+
+	"github.com/shindakun/bskyoauth/internal/oauth"
 )
 
 var (
@@ -66,118 +67,9 @@ func GetHTTPClient() *http.Client {
 	return defaultHTTPClient
 }
 
-// oauthStateStore stores temporary OAuth state for PKCE and DPoP keys with TTL
-type oauthStateStore struct {
-	states          map[string]*stateEntry
-	mu              sync.RWMutex
-	ttl             time.Duration
-	cleanupInterval time.Duration
-	stopCh          chan struct{}
-	stopped         bool
-}
-
-type stateEntry struct {
-	state     *internalOAuthState
-	expiresAt time.Time
-}
-
-type internalOAuthState struct {
-	CodeVerifier   string
-	DPoPKey        interface{} // *ecdsa.PrivateKey
-	ExpectedIssuer string      // Expected authorization server for validation
-	DID            string      // User's DID for session creation
-}
-
-const (
-	// DefaultStateStoreTTL is the default time-to-live for OAuth state entries (10 minutes)
-	DefaultStateStoreTTL = 10 * time.Minute
-	// DefaultCleanupInterval is how often the cleanup goroutine runs (1 minute)
-	DefaultCleanupInterval = 1 * time.Minute
-)
-
-var globalStateStore = newOAuthStateStore(DefaultStateStoreTTL)
-
-// newOAuthStateStore creates a new OAuth state store with the given TTL
-func newOAuthStateStore(ttl time.Duration) *oauthStateStore {
-	return newOAuthStateStoreWithInterval(ttl, DefaultCleanupInterval)
-}
-
-// newOAuthStateStoreWithInterval creates a new OAuth state store with custom TTL and cleanup interval
-func newOAuthStateStoreWithInterval(ttl, cleanupInterval time.Duration) *oauthStateStore {
-	store := &oauthStateStore{
-		states:          make(map[string]*stateEntry),
-		ttl:             ttl,
-		cleanupInterval: cleanupInterval,
-		stopCh:          make(chan struct{}),
-	}
-	go store.cleanupExpired()
-	return store
-}
-
-func (s *oauthStateStore) set(state string, oauth *internalOAuthState) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.states[state] = &stateEntry{
-		state:     oauth,
-		expiresAt: time.Now().Add(s.ttl),
-	}
-}
-
-func (s *oauthStateStore) get(state string) (*internalOAuthState, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	entry, exists := s.states[state]
-	if !exists {
-		return nil, false
-	}
-
-	// Check if expired
-	if time.Now().After(entry.expiresAt) {
-		return nil, false
-	}
-
-	return entry.state, true
-}
-
-func (s *oauthStateStore) delete(state string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.states, state)
-}
-
-// cleanupExpired removes expired entries from the store
-func (s *oauthStateStore) cleanupExpired() {
-	ticker := time.NewTicker(s.cleanupInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			s.mu.Lock()
-			now := time.Now()
-			for key, entry := range s.states {
-				if now.After(entry.expiresAt) {
-					delete(s.states, key)
-				}
-			}
-			s.mu.Unlock()
-		case <-s.stopCh:
-			return
-		}
-	}
-}
-
-// stop gracefully stops the cleanup goroutine (used for testing/shutdown)
-func (s *oauthStateStore) stop() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if !s.stopped {
-		close(s.stopCh)
-		s.stopped = true
-	}
-}
+// globalStateStore is the package-level OAuth state store.
+// Uses internal/oauth.StateStore for implementation.
+var globalStateStore = oauth.NewStateStore(oauth.DefaultTTL)
 
 // StartAuthFlow initiates the OAuth authorization flow for a given handle.
 // Returns an AuthFlowState with the authorization URL and state information.
@@ -226,7 +118,7 @@ func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowSta
 	}
 
 	// Store OAuth state with expected issuer for validation
-	globalStateStore.set(state, &internalOAuthState{
+	globalStateStore.Set(state, &oauth.State{
 		CodeVerifier:   codeVerifier,
 		DPoPKey:        dpopKey,
 		ExpectedIssuer: authServer,
@@ -309,14 +201,14 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, code, state, issuer strin
 		"issuer", issuer)
 
 	// Retrieve OAuth state
-	oauthState, exists := globalStateStore.get(state)
+	oauthState, exists := globalStateStore.Get(state)
 	if !exists {
 		logger.Warn("invalid or expired OAuth state",
 			"state", state,
 			"issuer", issuer)
 		return nil, ErrInvalidState
 	}
-	globalStateStore.delete(state)
+	globalStateStore.Delete(state)
 
 	// Validate issuer matches expected authorization server
 	// This prevents authorization code injection attacks
