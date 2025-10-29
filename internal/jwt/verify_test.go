@@ -1,4 +1,4 @@
-package bskyoauth
+package jwt
 
 import (
 	"crypto/ecdsa"
@@ -96,7 +96,7 @@ func TestValidateAccessToken_ValidToken(t *testing.T) {
 	}
 
 	// Validate token
-	validatedToken, err := validateAccessToken(tokenString, "https://test.example.com", server.URL)
+	validatedToken, err := ValidateAccessToken(tokenString, "https://test.example.com", server.URL)
 	if err != nil {
 		t.Errorf("Expected valid token to pass validation, got error: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestValidateAccessToken_ExpiredToken(t *testing.T) {
 	}
 
 	// Validate token - should fail
-	_, err = validateAccessToken(tokenString, "https://test.example.com", server.URL)
+	_, err = ValidateAccessToken(tokenString, "https://test.example.com", server.URL)
 	if err == nil {
 		t.Error("Expected expired token to fail validation")
 	}
@@ -175,7 +175,7 @@ func TestValidateAccessToken_InvalidSignature(t *testing.T) {
 	defer server.Close()
 
 	// Validate token - should fail due to signature mismatch
-	_, err = validateAccessToken(tokenString, "https://test.example.com", server.URL)
+	_, err = ValidateAccessToken(tokenString, "https://test.example.com", server.URL)
 	if err == nil {
 		t.Error("Expected token with invalid signature to fail validation")
 	}
@@ -204,7 +204,7 @@ func TestValidateAccessToken_WrongIssuer(t *testing.T) {
 	}
 
 	// Validate with different expected issuer
-	_, err = validateAccessToken(tokenString, "https://test.example.com", server.URL)
+	_, err = ValidateAccessToken(tokenString, "https://test.example.com", server.URL)
 	if err == nil {
 		t.Error("Expected token with wrong issuer to fail validation")
 	}
@@ -260,7 +260,7 @@ func TestValidateAccessToken_MissingClaims(t *testing.T) {
 				t.Fatalf("Failed to create test token: %v", err)
 			}
 
-			_, err = validateAccessToken(tokenString, "https://test.example.com", server.URL)
+			_, err = ValidateAccessToken(tokenString, "https://test.example.com", server.URL)
 			if err == nil {
 				t.Errorf("Expected token with %s to fail validation", tc.name)
 			}
@@ -290,14 +290,14 @@ func TestValidateAccessToken_FutureIssuedAt(t *testing.T) {
 		t.Fatalf("Failed to create test token: %v", err)
 	}
 
-	_, err = validateAccessToken(tokenString, "https://test.example.com", server.URL)
+	_, err = ValidateAccessToken(tokenString, "https://test.example.com", server.URL)
 	if err == nil {
 		t.Error("Expected token with future iat to fail validation")
 	}
 }
 
 func TestValidateAccessToken_EmptyToken(t *testing.T) {
-	_, err := validateAccessToken("", "https://test.example.com", "https://jwks.example.com")
+	_, err := ValidateAccessToken("", "https://test.example.com", "https://jwks.example.com")
 	if err == nil {
 		t.Error("Expected empty token to fail validation")
 	}
@@ -308,7 +308,7 @@ func TestValidateAccessToken_EmptyToken(t *testing.T) {
 }
 
 func TestValidateAccessToken_EmptyJWKSURI(t *testing.T) {
-	_, err := validateAccessToken("test.token.string", "https://test.example.com", "")
+	_, err := ValidateAccessToken("test.token.string", "https://test.example.com", "")
 	if err == nil {
 		t.Error("Expected empty JWKS URI to fail validation")
 	}
@@ -377,7 +377,7 @@ func TestJWKSCache_Caching(t *testing.T) {
 	}
 
 	// First validation - should fetch JWKS
-	_, err = validateAccessToken(tokenString, "https://test.example.com", server.URL)
+	_, err = ValidateAccessToken(tokenString, "https://test.example.com", server.URL)
 	if err != nil {
 		t.Fatalf("First validation failed: %v", err)
 	}
@@ -387,7 +387,7 @@ func TestJWKSCache_Caching(t *testing.T) {
 	}
 
 	// Second validation - should use cache
-	_, err = validateAccessToken(tokenString, "https://test.example.com", server.URL)
+	_, err = ValidateAccessToken(tokenString, "https://test.example.com", server.URL)
 	if err != nil {
 		t.Fatalf("Second validation failed: %v", err)
 	}
@@ -484,7 +484,7 @@ func TestValidateAccessToken_WrongAlgorithm(t *testing.T) {
 	defer server.Close()
 
 	// Should fail due to algorithm mismatch
-	_, err = validateAccessToken(tokenString, "https://test.example.com", server.URL)
+	_, err = ValidateAccessToken(tokenString, "https://test.example.com", server.URL)
 	if err == nil {
 		t.Error("Expected token with wrong algorithm to fail validation")
 	}
@@ -511,7 +511,7 @@ func TestValidateAccessToken_MissingKid(t *testing.T) {
 	defer server.Close()
 
 	// Should fail due to missing kid
-	_, err = validateAccessToken(tokenString, "https://test.example.com", server.URL)
+	_, err = ValidateAccessToken(tokenString, "https://test.example.com", server.URL)
 	if err == nil {
 		t.Error("Expected token without kid to fail validation")
 	}
