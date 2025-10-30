@@ -76,6 +76,39 @@ This document tracks version changes for the bskyoauth module.
 
 Track minor version changes here for future releases.
 
+### v1.1.2 (2025-10-29)
+
+**Enhancements**
+- Display record ID (rkey) after creating custom records in web-demo
+- Added success page showing full AT URI and extracted rkey
+- Quick action buttons for viewing or deleting newly created records
+- Improved user experience with immediate feedback
+
+**Changes**
+- `examples/web-demo/main.go`: Added `extractRkeyFromURI()` utility function
+- `examples/web-demo/main.go`: Added `renderRecordCreatedPage()` for success display
+- `examples/web-demo/main.go`: Updated `createRecordHandler` to show success page instead of redirect
+
+**User Experience Improvements**
+- Users can now immediately see and copy the rkey of created records
+- Direct "View Record (JSON)" button to see record data immediately
+- Direct "Delete Record" button with confirmation for newly created records
+- "Create Another Record" link to easily create more records
+- No need to check server logs or manually type rkeys
+
+**UI Features**
+- Styled success page with clear visual hierarchy
+- Copyable rkey text with user-select styling
+- Color-coded success message
+- Monospace display for AT URI and rkey
+- Responsive button layout
+
+**Backward Compatibility**
+- ✅ 100% compatible with v1.1.1
+- ✅ No API changes to core library
+- ✅ Only affects web-demo example UI
+- ✅ No breaking changes
+
 ### v1.1.1 (2025-10-29)
 
 **Bug Fixes**

@@ -131,6 +131,94 @@ func checkAndRefreshToken(client *bskyoauth.Client, sessionID string, session *b
 	return session, nil
 }
 
+// extractRkeyFromURI extracts the rkey (record key) from an AT URI
+// Example: "at://did:plc:abc123/com.demo.bskyoauth/3k7qxyz..." -> "3k7qxyz..."
+func extractRkeyFromURI(uri string) string {
+	parts := strings.Split(uri, "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return ""
+}
+
+// renderRecordCreatedPage displays a success page after record creation
+func renderRecordCreatedPage(w http.ResponseWriter, uri, rkey string) {
+	html := `<!DOCTYPE html>
+<html>
+<head>
+	<title>Record Created - Bluesky OAuth Demo</title>
+	<style>
+		body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+		.success { color: green; font-weight: bold; font-size: 1.2em; }
+		.record-info {
+			background: #f0f0f0;
+			padding: 15px;
+			margin: 10px 0;
+			border-radius: 5px;
+			font-family: monospace;
+			word-break: break-all;
+		}
+		.rkey {
+			font-size: 1.2em;
+			color: #0066cc;
+			user-select: all;
+			padding: 5px;
+			background: white;
+			border-radius: 3px;
+		}
+		.actions { margin: 20px 0; }
+		.actions a, .actions button {
+			margin: 5px;
+			padding: 10px 15px;
+			text-decoration: none;
+			background: #0066cc;
+			color: white;
+			border: none;
+			border-radius: 5px;
+			cursor: pointer;
+			font-size: 14px;
+		}
+		.actions a:hover, .actions button:hover {
+			background: #0052a3;
+		}
+		.actions form { display: inline; }
+		hr { margin: 30px 0; }
+	</style>
+</head>
+<body>
+	<h1>✓ Record Created Successfully!</h1>
+
+	<p class="success">Your com.demo.bskyoauth record has been created</p>
+
+	<div class="record-info">
+		<p><strong>Full AT URI:</strong><br>` + uri + `</p>
+		<p><strong>Record Key (rkey):</strong><br>
+		<span class="rkey">` + rkey + `</span></p>
+	</div>
+
+	<div class="actions">
+		<a href="/get-record?rkey=` + rkey + `">View Record (JSON)</a>
+
+		<form action="/delete-record" method="post">
+			<input type="hidden" name="rkey" value="` + rkey + `">
+			<button type="submit" onclick="return confirm('Delete this record?')">
+				Delete Record
+			</button>
+		</form>
+
+		<a href="/">Create Another Record</a>
+	</div>
+
+	<hr>
+	<p><a href="/">← Back to Home</a></p>
+</body>
+</html>`
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(html))
+}
+
 func homeHandler(client *bskyoauth.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID, err := r.Cookie("session_id")
@@ -423,7 +511,12 @@ func createRecordHandler(client *bskyoauth.Client) http.HandlerFunc {
 		}
 
 		log.Printf("Created com.demo.bskyoauth record: %s", output.Uri)
-		http.Redirect(w, r, "/", http.StatusFound)
+
+		// Extract rkey from URI for display
+		rkey := extractRkeyFromURI(output.Uri)
+
+		// Render success page with record details
+		renderRecordCreatedPage(w, output.Uri, rkey)
 	}
 }
 
