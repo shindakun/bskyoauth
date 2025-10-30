@@ -85,6 +85,14 @@ func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowSta
 	dir := identity.DefaultDirectory()
 	atid, err := syntax.ParseAtIdentifier(handle)
 	if err != nil {
+		// Audit: Auth start failure
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventAuthStart,
+			Action:    "start_oauth_flow",
+			Resource:  handle,
+			Result:    AuditResultFailure,
+			Error:     err.Error(),
+		})
 		return nil, fmt.Errorf("%w: %v", ErrInvalidHandle, err)
 	}
 
@@ -93,6 +101,14 @@ func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowSta
 		logger.Warn("handle lookup failed",
 			"handle", handle,
 			"error", err)
+		// Audit: Auth start failure
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventAuthStart,
+			Action:    "start_oauth_flow",
+			Resource:  handle,
+			Result:    AuditResultFailure,
+			Error:     err.Error(),
+		})
 		return nil, fmt.Errorf("%w: %v", ErrInvalidHandle, err)
 	}
 
@@ -171,6 +187,15 @@ func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowSta
 		"did", string(ident.DID),
 		"auth_server", authServer)
 
+	// Audit: Auth start success
+	_ = LogAuditEvent(ctx, AuditEvent{
+		EventType: AuditEventAuthStart,
+		Actor:     string(ident.DID),
+		Action:    "start_oauth_flow",
+		Resource:  handle,
+		Result:    AuditResultSuccess,
+	})
+
 	return &AuthFlowState{
 		State:        state,
 		CodeVerifier: codeVerifier,
@@ -186,12 +211,28 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, code, state, issuer strin
 	logger.Info("completing OAuth flow",
 		"issuer", issuer)
 
+	// Audit: OAuth callback received
+	_ = LogAuditEvent(ctx, AuditEvent{
+		EventType: AuditEventAuthCallback,
+		Action:    "oauth_callback_received",
+		Resource:  issuer,
+		Result:    AuditResultSuccess,
+	})
+
 	// Retrieve OAuth state
 	oauthState, exists := globalStateStore.Get(state)
 	if !exists {
 		logger.Warn("invalid or expired OAuth state",
 			"state", state,
 			"issuer", issuer)
+		// Audit: Invalid state (security event)
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventSecurityInvalidState,
+			Action:    "oauth_callback_invalid_state",
+			Resource:  issuer,
+			Result:    AuditResultFailure,
+			Error:     "invalid or expired OAuth state",
+		})
 		return nil, ErrInvalidState
 	}
 	globalStateStore.Delete(state)
@@ -204,6 +245,19 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, code, state, issuer strin
 			"expected_issuer", oauthState.ExpectedIssuer,
 			"received_issuer", issuer,
 			"did", oauthState.DID)
+		// Audit: Issuer mismatch (critical security event)
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventSecurityIssuerMismatch,
+			Actor:     oauthState.DID,
+			Action:    "oauth_callback_issuer_mismatch",
+			Resource:  issuer,
+			Result:    AuditResultFailure,
+			Error:     fmt.Sprintf("expected %s, got %s", oauthState.ExpectedIssuer, issuer),
+			Metadata: map[string]interface{}{
+				"expected_issuer": oauthState.ExpectedIssuer,
+				"received_issuer": issuer,
+			},
+		})
 		return nil, fmt.Errorf("%w: expected %s, got %s", ErrIssuerMismatch,
 			oauthState.ExpectedIssuer, issuer)
 	}
@@ -262,6 +316,15 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, code, state, issuer strin
 			"issuer", issuer,
 			"token_endpoint", metadata.TokenEndpoint,
 			"error", err)
+		// Audit: Auth failure
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventAuthFailure,
+			Actor:     oauthState.DID,
+			Action:    "oauth_token_exchange",
+			Resource:  issuer,
+			Result:    AuditResultFailure,
+			Error:     err.Error(),
+		})
 		return nil, fmt.Errorf("%w: %v", ErrTokenExchange, err)
 	}
 
@@ -331,6 +394,15 @@ func (c *Client) CompleteAuthFlow(ctx context.Context, code, state, issuer strin
 		"issuer", issuer,
 		"has_refresh_token", refreshToken != "")
 
+	// Audit: Auth success
+	_ = LogAuditEvent(ctx, AuditEvent{
+		EventType: AuditEventAuthSuccess,
+		Actor:     sub,
+		Action:    "complete_oauth_flow",
+		Resource:  issuer,
+		Result:    AuditResultSuccess,
+	})
+
 	return session, nil
 }
 
@@ -382,6 +454,15 @@ func (c *Client) RefreshToken(ctx context.Context, session *Session) (*Session, 
 		logger.Error("token refresh failed",
 			"did", session.DID,
 			"error", err)
+		// Audit: Token refresh failure
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventSessionRefresh,
+			Actor:     session.DID,
+			Action:    "refresh_access_token",
+			Resource:  session.PDS,
+			Result:    AuditResultFailure,
+			Error:     err.Error(),
+		})
 		return nil, fmt.Errorf("token refresh failed: %w", err)
 	}
 
@@ -427,6 +508,15 @@ func (c *Client) RefreshToken(ctx context.Context, session *Session) (*Session, 
 	logger.Info("token refresh successful",
 		"did", session.DID,
 		"new_access_token_expires_at", newSession.AccessTokenExpiresAt)
+
+	// Audit: Token refresh success
+	_ = LogAuditEvent(ctx, AuditEvent{
+		EventType: AuditEventSessionRefresh,
+		Actor:     session.DID,
+		Action:    "refresh_access_token",
+		Resource:  session.PDS,
+		Result:    AuditResultSuccess,
+	})
 
 	return newSession, nil
 }

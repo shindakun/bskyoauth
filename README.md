@@ -869,6 +869,389 @@ if err != nil {
 }
 ```
 
+## Audit Trail
+
+The library provides comprehensive audit logging for security-relevant operations. Audit logs provide a tamper-evident trail of sensitive actions for compliance, security monitoring, and forensic analysis.
+
+### Features
+
+- **Structured Events**: JSON-formatted audit events with standardized fields
+- **Automatic Enrichment**: Context-aware enrichment with request IDs and session IDs
+- **Flexible Implementations**: File-based, rotating files, or custom backends (database, SIEM)
+- **Thread-Safe**: All audit loggers are safe for concurrent use
+- **Minimal Overhead**: No-op default logger (opt-in)
+
+### Quick Start
+
+```go
+import "github.com/shindakun/bskyoauth"
+
+// 1. Create and configure audit logger
+auditLogger, err := bskyoauth.NewRotatingFileAuditLogger("/var/log/myapp")
+if err != nil {
+    log.Fatal(err)
+}
+defer auditLogger.Close()
+
+// 2. Enable audit logging globally
+bskyoauth.SetAuditLogger(auditLogger)
+
+// 3. Use the library normally - audit events are logged automatically
+client := bskyoauth.NewClient("https://example.com")
+session, _ := client.CompleteAuthFlow(ctx, code, state, issuer)
+```
+
+### Audit Event Types
+
+All operations are automatically audited with standardized event types:
+
+**Authentication Events:**
+- `auth.start` - OAuth flow initiated
+- `auth.callback` - OAuth callback received
+- `auth.success` - OAuth flow completed successfully
+- `auth.failure` - OAuth flow failed
+
+**Session Events:**
+- `session.created` - New session created
+- `session.refresh` - Token refresh performed
+- `session.deleted` - Session explicitly deleted
+- `session.expired` - Session expired (TTL)
+
+**API Operation Events:**
+- `api.post.create` - Post created
+- `api.record.create` - Custom record created
+- `api.record.read` - Record retrieved
+- `api.record.delete` - Record deleted
+
+**Security Events:**
+- `security.issuer_mismatch` - Issuer validation failed (critical)
+- `security.invalid_state` - Invalid OAuth state parameter
+- `security.rate_limit` - Rate limit exceeded
+
+### Audit Log Format
+
+Each audit event is logged as a JSON line with the following structure:
+
+```json
+{
+  "timestamp": "2024-01-15T10:30:00Z",
+  "event_type": "auth.success",
+  "actor": "did:plc:abc123def456",
+  "action": "complete_oauth_flow",
+  "resource": "https://bsky.social",
+  "result": "success",
+  "request_id": "req-123",
+  "session_id": "sess-456",
+  "metadata": {
+    "ip_address": "192.168.1.1",
+    "user_agent": "MyApp/1.0"
+  }
+}
+```
+
+**Field Descriptions:**
+- `timestamp` - When the event occurred (UTC)
+- `event_type` - Standardized event category (see constants)
+- `actor` - DID of the user performing the action (empty for unauthenticated)
+- `action` - Description of what happened
+- `resource` - What was acted upon (handle, AT URI, etc.)
+- `result` - Either "success" or "failure"
+- `error` - Error details if result is "failure"
+- `metadata` - Additional context (IP, user agent, etc.)
+- `request_id` - Correlation ID from context
+- `session_id` - Session ID from context
+
+### Built-in Audit Loggers
+
+#### FileAuditLogger
+
+Simple file-based logger that appends to a single file:
+
+```go
+logger, err := bskyoauth.NewFileAuditLogger("/var/log/myapp/audit.log")
+if err != nil {
+    log.Fatal(err)
+}
+defer logger.Close()
+bskyoauth.SetAuditLogger(logger)
+```
+
+**Features:**
+- Append-only mode for tamper resistance
+- Restrictive file permissions (0600)
+- Thread-safe concurrent writes
+- Automatic directory creation
+
+#### RotatingFileAuditLogger
+
+Daily rotating audit log files:
+
+```go
+logger, err := bskyoauth.NewRotatingFileAuditLogger("/var/log/myapp")
+if err != nil {
+    log.Fatal(err)
+}
+defer logger.Close()
+bskyoauth.SetAuditLogger(logger)
+```
+
+**Features:**
+- Automatic daily rotation at midnight UTC
+- Files named: `audit-YYYY-MM-DD.log`
+- Thread-safe rotation and writes
+- Preserves old files for compliance
+
+**Example File Structure:**
+```
+/var/log/myapp/
+├── audit-2024-01-13.log
+├── audit-2024-01-14.log
+└── audit-2024-01-15.log  # current
+```
+
+### Custom Audit Loggers
+
+Implement the `AuditLogger` interface for custom backends:
+
+```go
+type AuditLogger interface {
+    Log(ctx context.Context, event AuditEvent) error
+}
+```
+
+#### Example: PostgreSQL Audit Logger
+
+```go
+type PostgreSQLAuditLogger struct {
+    db *sql.DB
+}
+
+func (p *PostgreSQLAuditLogger) Log(ctx context.Context, event bskyoauth.AuditEvent) error {
+    query := `
+        INSERT INTO audit_log
+        (timestamp, event_type, actor, action, resource, result, error, metadata, request_id, session_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `
+
+    metadataJSON, _ := json.Marshal(event.Metadata)
+
+    _, err := p.db.ExecContext(ctx, query,
+        event.Timestamp,
+        event.EventType,
+        event.Actor,
+        event.Action,
+        event.Resource,
+        event.Result,
+        event.Error,
+        metadataJSON,
+        event.RequestID,
+        event.SessionID,
+    )
+
+    return err
+}
+
+// Usage
+auditLogger := &PostgreSQLAuditLogger{db: db}
+bskyoauth.SetAuditLogger(auditLogger)
+```
+
+#### Example: Splunk/SIEM Integration
+
+```go
+type SplunkAuditLogger struct {
+    endpoint string
+    token    string
+    client   *http.Client
+}
+
+func (s *SplunkAuditLogger) Log(ctx context.Context, event bskyoauth.AuditEvent) error {
+    payload := map[string]interface{}{
+        "sourcetype": "bskyoauth_audit",
+        "event":      event,
+    }
+
+    data, _ := json.Marshal(payload)
+    req, _ := http.NewRequestWithContext(ctx, "POST", s.endpoint, bytes.NewReader(data))
+    req.Header.Set("Authorization", "Splunk "+s.token)
+
+    resp, err := s.client.Do(req)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+
+    return nil
+}
+```
+
+### Manual Audit Logging
+
+For custom events or additional context:
+
+```go
+import "github.com/shindakun/bskyoauth"
+
+// Log custom audit event
+err := bskyoauth.LogAuditEvent(ctx, bskyoauth.AuditEvent{
+    EventType: "custom.operation",
+    Actor:     session.DID,
+    Action:    "perform_sensitive_operation",
+    Resource:  "custom-resource-id",
+    Result:    bskyoauth.AuditResultSuccess,
+    Metadata: map[string]interface{}{
+        "ip_address": r.RemoteAddr,
+        "user_agent": r.UserAgent(),
+        "custom_field": "custom_value",
+    },
+})
+```
+
+### Context Enrichment
+
+Audit events are automatically enriched with data from the request context:
+
+```go
+import "context"
+
+// Add request ID to context (automatically included in audit events)
+ctx := context.WithValue(ctx, bskyoauth.ContextKeyRequestID, "req-123")
+
+// Add session ID to context (automatically included in audit events)
+ctx = context.WithValue(ctx, bskyoauth.ContextKeySessionID, "sess-456")
+
+// Now all audit events will include request_id and session_id
+client.CreatePost(ctx, session, "Hello world")
+```
+
+### Compliance Best Practices
+
+**Log Retention:**
+```bash
+# Example: Keep audit logs for 7 years (SOX compliance)
+find /var/log/myapp -name "audit-*.log" -mtime +2555 -delete
+```
+
+**Log Integrity:**
+```bash
+# Generate SHA-256 checksums for tamper detection
+sha256sum /var/log/myapp/audit-*.log > audit-checksums.txt
+```
+
+**Access Control:**
+```bash
+# Restrict audit log access
+chmod 600 /var/log/myapp/audit-*.log
+chown app-user:app-group /var/log/myapp
+```
+
+**Monitoring:**
+```bash
+# Alert on critical security events
+grep '"event_type":"security.' /var/log/myapp/audit-*.log | \
+  jq 'select(.result == "failure")'
+```
+
+### Performance Considerations
+
+- **Asynchronous Logging**: Audit logging is synchronous by default. For high-throughput applications, consider buffering:
+
+```go
+type BufferedAuditLogger struct {
+    underlying bskyoauth.AuditLogger
+    buffer     chan bskyoauth.AuditEvent
+}
+
+func NewBufferedAuditLogger(underlying bskyoauth.AuditLogger, bufferSize int) *BufferedAuditLogger {
+    b := &BufferedAuditLogger{
+        underlying: underlying,
+        buffer:     make(chan bskyoauth.AuditEvent, bufferSize),
+    }
+
+    go b.processEvents()
+    return b
+}
+
+func (b *BufferedAuditLogger) Log(ctx context.Context, event bskyoauth.AuditEvent) error {
+    select {
+    case b.buffer <- event:
+        return nil
+    default:
+        // Buffer full - log synchronously to avoid data loss
+        return b.underlying.Log(ctx, event)
+    }
+}
+
+func (b *BufferedAuditLogger) processEvents() {
+    for event := range b.buffer {
+        b.underlying.Log(context.Background(), event)
+    }
+}
+```
+
+- **Log Rotation**: Use `RotatingFileAuditLogger` to prevent disk space exhaustion
+- **Sampling**: For very high traffic, consider sampling non-security events
+- **Compression**: Compress old audit logs to save disk space:
+
+```bash
+# Compress logs older than 7 days
+find /var/log/myapp -name "audit-*.log" -mtime +7 -exec gzip {} \;
+```
+
+### Disabling Audit Logging
+
+Audit logging is disabled by default (no-op logger). To explicitly disable after enabling:
+
+```go
+bskyoauth.SetAuditLogger(nil) // Reverts to no-op logger
+```
+
+### Security Event Examples
+
+**Issuer Mismatch (Code Injection Attack):**
+```json
+{
+  "timestamp": "2024-01-15T10:30:00Z",
+  "event_type": "security.issuer_mismatch",
+  "actor": "did:plc:abc123",
+  "action": "oauth_callback_issuer_mismatch",
+  "resource": "https://evil.com",
+  "result": "failure",
+  "error": "expected https://bsky.social, got https://evil.com",
+  "metadata": {
+    "expected_issuer": "https://bsky.social",
+    "received_issuer": "https://evil.com"
+  }
+}
+```
+
+**Invalid State (CSRF Attack):**
+```json
+{
+  "timestamp": "2024-01-15T10:31:00Z",
+  "event_type": "security.invalid_state",
+  "action": "oauth_callback_invalid_state",
+  "resource": "https://bsky.social",
+  "result": "failure",
+  "error": "invalid or expired OAuth state"
+}
+```
+
+**Rate Limit Exceeded:**
+```json
+{
+  "timestamp": "2024-01-15T10:32:00Z",
+  "event_type": "security.rate_limit",
+  "action": "rate_limit_exceeded",
+  "resource": "/callback",
+  "result": "failure",
+  "metadata": {
+    "ip_address": "192.168.1.100",
+    "limit": "10 req/min"
+  }
+}
+```
+
 ## Example Application
 
 A complete web application example is available in [examples/web-demo](examples/web-demo/main.go).

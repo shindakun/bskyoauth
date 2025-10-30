@@ -19,19 +19,6 @@ This security audit identified multiple areas for improvement in the bskyoauth l
 
 ## Low Priority / Best Practices
 
-### 17. Missing Audit Trail
-**Issue:** No audit log for sensitive operations.
-
-**Recommendation:**
-- Implement audit logging for:
-  - Authentication attempts
-  - Session creation/deletion
-  - Post creation/deletion
-  - Record modifications
-- Include user DID, timestamp, action, result
-
----
-
 ### 18. Environment Configuration
 **File:** [examples/web-demo/main.go:14-17](examples/web-demo/main.go#L14-L17)
 

@@ -101,6 +101,24 @@ func (c *Client) CreatePost(ctx context.Context, session *Session, text string) 
 	// Update session with the latest nonce
 	session.DPoPNonce = apiSession.DPoPNonce
 
+	// Audit: Post creation
+	if err != nil {
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventPostCreate,
+			Actor:     session.DID,
+			Action:    "create_post",
+			Result:    AuditResultFailure,
+			Error:     err.Error(),
+		})
+	} else {
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventPostCreate,
+			Actor:     session.DID,
+			Action:    "create_post",
+			Result:    AuditResultSuccess,
+		})
+	}
+
 	return err
 }
 
@@ -142,6 +160,33 @@ func (c *Client) CreateRecord(ctx context.Context, session *Session, collection 
 	// Update session with the latest nonce
 	session.DPoPNonce = apiSession.DPoPNonce
 
+	// Audit: Record creation
+	if err != nil {
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventRecordCreate,
+			Actor:     session.DID,
+			Action:    "create_record",
+			Resource:  collection,
+			Result:    AuditResultFailure,
+			Error:     err.Error(),
+		})
+	} else {
+		var resourceURI string
+		if output != nil {
+			resourceURI = output.Uri
+		}
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventRecordCreate,
+			Actor:     session.DID,
+			Action:    "create_record",
+			Resource:  resourceURI,
+			Result:    AuditResultSuccess,
+			Metadata: map[string]interface{}{
+				"collection": collection,
+			},
+		})
+	}
+
 	return output, err
 }
 
@@ -178,6 +223,27 @@ func (c *Client) DeleteRecord(ctx context.Context, session *Session, collection,
 
 	// Update session with the latest nonce
 	session.DPoPNonce = apiSession.DPoPNonce
+
+	// Audit: Record deletion
+	resourceURI := "at://" + session.DID + "/" + collection + "/" + rkey
+	if err != nil {
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventRecordDelete,
+			Actor:     session.DID,
+			Action:    "delete_record",
+			Resource:  resourceURI,
+			Result:    AuditResultFailure,
+			Error:     err.Error(),
+		})
+	} else {
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventRecordDelete,
+			Actor:     session.DID,
+			Action:    "delete_record",
+			Resource:  resourceURI,
+			Result:    AuditResultSuccess,
+		})
+	}
 
 	return err
 }
@@ -218,6 +284,27 @@ func (c *Client) GetRecord(ctx context.Context, session *Session, collection, rk
 
 	// Update session with the latest nonce
 	session.DPoPNonce = apiSession.DPoPNonce
+
+	// Audit: Record read
+	resourceURI := "at://" + session.DID + "/" + collection + "/" + rkey
+	if err != nil {
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventRecordRead,
+			Actor:     session.DID,
+			Action:    "get_record",
+			Resource:  resourceURI,
+			Result:    AuditResultFailure,
+			Error:     err.Error(),
+		})
+	} else {
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventRecordRead,
+			Actor:     session.DID,
+			Action:    "get_record",
+			Resource:  resourceURI,
+			Result:    AuditResultSuccess,
+		})
+	}
 
 	return record, err
 }

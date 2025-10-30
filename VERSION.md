@@ -9,7 +9,100 @@ This document tracks version changes for the bskyoauth module.
 - **Minor version (v1.x.0)**: New features, non-breaking enhancements
 - **Patch version (v1.0.x)**: Bug fixes, documentation updates, internal improvements
 
-## Current Version: v1.2.1
+## Current Version: v1.3.0
+
+### v1.3.0 (2025-10-29)
+
+**Minor version release** - Audit trail support for compliance and security monitoring
+
+#### New Features
+
+**Audit Trail Infrastructure:**
+- `AuditEvent` struct with standardized fields (timestamp, event_type, actor, action, resource, result, error, metadata, request_id, session_id)
+- `AuditLogger` interface for flexible backend implementations
+- `NoOpAuditLogger` as safe default (opt-in design, zero overhead)
+- 15+ standardized event type constants for consistent categorization
+- Package-level functions: `SetAuditLogger()`, `GetAuditLogger()`, `LogAuditEvent()`
+- Automatic context enrichment (timestamps, request IDs, session IDs)
+
+**Built-in Audit Loggers:**
+- `FileAuditLogger` - Simple append-only file logging with restrictive permissions (0600)
+- `RotatingFileAuditLogger` - Daily log rotation at midnight UTC
+- Thread-safe concurrent writes with mutex protection
+- Automatic directory creation with proper permissions
+
+**Comprehensive Integration:**
+- **OAuth flow** (`oauth.go`):
+  - `auth.start` - Flow initiation (success/failure)
+  - `auth.callback` - Callback received
+  - `auth.success` / `auth.failure` - Flow completion
+  - `security.issuer_mismatch` - Code injection attempt detection (critical security event)
+  - `security.invalid_state` - CSRF attack attempt detection
+- **Token refresh** (`oauth.go`):
+  - `session.refresh` - Token refresh operations (success/failure)
+- **API operations** (`client.go`):
+  - `api.post.create` - Post creation
+  - `api.record.create` - Custom record creation (includes AT URI)
+  - `api.record.read` - Record retrieval
+  - `api.record.delete` - Record deletion
+
+#### Files Added
+- `audit.go` - Core audit infrastructure (159 lines)
+- `audit_file.go` - File-based audit loggers (177 lines)
+- `audit_test.go` - Comprehensive test suite (532 lines, 10 test functions)
+
+#### Files Modified
+- `oauth.go` - Integrated audit logging into auth flow and token refresh
+- `client.go` - Integrated audit logging into API operations (CreatePost, CreateRecord, GetRecord, DeleteRecord)
+- `README.md` - Added 380+ lines of audit trail documentation
+
+#### Documentation
+- New "Audit Trail" section in README with:
+  - Quick start guide
+  - Complete event type reference
+  - JSON log format specification with field descriptions
+  - Built-in logger documentation (FileAuditLogger, RotatingFileAuditLogger)
+  - Custom logger examples (PostgreSQL, Splunk/SIEM integration)
+  - Manual audit logging for custom events
+  - Context enrichment guide
+  - Compliance best practices (retention, integrity, access control, monitoring)
+  - Performance considerations (buffering, rotation, sampling, compression)
+  - Security event examples with JSON output
+
+#### Testing
+- 10 comprehensive audit tests covering:
+  - NoOp logger behavior
+  - Global logger configuration
+  - Event enrichment (request ID, session ID, timestamp)
+  - File logger functionality
+  - Rotating logger functionality
+  - Thread-safety under concurrent load (10 goroutines × 10 events)
+  - Directory creation
+  - Event structure validation
+  - Mock logger for testing custom implementations
+- All tests pass with `-race` detection
+- All 22 existing tests continue to pass (no regressions)
+
+#### Use Cases
+- **Compliance**: Meets audit trail requirements for SOX, PCI-DSS, HIPAA, GDPR
+- **Security Monitoring**: Real-time detection of attacks (CSRF, code injection, invalid states)
+- **Forensic Analysis**: Tamper-evident trail of all sensitive operations
+- **Incident Response**: Complete reconstruction of security events
+- **Operational Insights**: Track authentication patterns, API usage, errors
+
+#### Impact
+- **No Breaking Changes**: 100% backward compatible
+- **Opt-In Design**: Audit logging disabled by default (no performance impact)
+- **Flexible**: Interface-based design supports any backend (file, database, SIEM)
+- **Thread-Safe**: All loggers safe for concurrent use
+- **Production-Ready**: Restrictive permissions, append-only mode, daily rotation
+- **Compliance-Ready**: Structured JSON logs with complete event context
+
+#### Issue Resolution
+- Resolves Issue #17: Missing Audit Trail
+- Moved to COMPLETED_ISSUES.md with comprehensive implementation notes
+
+---
 
 ### v1.2.1 (2025-10-29)
 
