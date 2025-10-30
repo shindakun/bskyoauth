@@ -8,6 +8,85 @@ All completed issues are documented in [CHANGELOG.md](CHANGELOG.md) with version
 
 ## COMPLETED ISSUES
 
+### 18. Environment Configuration ✅ **COMPLETED (v1.3.1)**
+**Status:** FIXED - See [VERSION.md](VERSION.md) for details
+
+**Issue:** Limited configuration options via environment variables.
+
+**Implementation:**
+- ✅ Added 4 configurable environment variables
+  - `SESSION_TIMEOUT_DAYS` - Cookie lifetime configuration (default: 30 days)
+  - `RATE_LIMIT_AUTH` - Auth endpoint rate limits (default: 5 req/s, burst 10)
+  - `RATE_LIMIT_API` - API endpoint rate limits (default: 10 req/s, burst 20)
+  - `SERVER_PORT` - HTTP server port (default: 8181)
+
+- ✅ Helper functions for environment variable parsing
+  - `getEnvInt()` - Parse integers with validation and defaults
+  - `getRateLimitConfig()` - Parse "requests/sec,burst" format
+  - `validateConfig()` - Range validation with warnings
+
+- ✅ Configuration validation features
+  - Automatic validation on startup
+  - Warning logs for unusual but valid values
+  - Graceful fallback to defaults for invalid values
+  - Clear error messages with expected format
+
+- ✅ Comprehensive documentation
+  - Environment variable reference with defaults and examples
+  - Configuration examples for dev, staging, production, high-traffic
+  - Deployment examples (Docker, Docker Compose, Kubernetes)
+  - Rate limiting guidelines by scenario
+  - Session timeout security recommendations
+
+**Scope Decision:**
+- **Minimal approach**: Only 4 most critical production configuration needs
+- **NOT included** (kept hardcoded with good defaults):
+  - HTTP client timeout (30s is industry standard)
+  - Server read/write/idle timeouts (current values are best practice)
+  - Cookie security flags (auto-detected from HTTPS, should not be overridden)
+  - Logging level (already auto-configured based on environment)
+
+**Testing:**
+- ✅ Default values work without any environment variables
+- ✅ Custom values applied correctly
+- ✅ Invalid values fall back to defaults with warnings
+- ✅ Unusual values trigger warnings but still apply
+- ✅ Server port configuration tested
+- ✅ Rate limit configuration tested (format: "req/sec,burst")
+- ✅ Session timeout calculation tested (days to seconds conversion)
+
+**Features:**
+- **12-Factor App**: Environment-based configuration
+- **Container-Friendly**: Works with Docker, K8s, orchestration
+- **Secure by Default**: All optional, sensible defaults maintained
+- **Production-Ready**: Per-environment configuration without code changes
+- **User-Friendly**: Clear validation messages, graceful degradation
+
+**Architecture:**
+- Example application only (no core library changes)
+- Zero breaking changes
+- Backward compatible (all env vars optional)
+- Follows Go conventions (strconv, validation, error handling)
+
+**Impact:**
+- **Flexibility**: Production deployments can tune rate limits and timeouts
+- **Simplicity**: Only 4 variables (minimal configuration burden)
+- **Safety**: Validation prevents misconfiguration
+- **Documentation**: Clear guidance for all deployment scenarios
+
+**Files Modified:**
+- `examples/web-demo/main.go` - Added env parsing and validation (~70 lines)
+- `README.md` - Added environment variable documentation (~185 lines)
+
+**Test Results:**
+- ✅ Defaults: Port 8181, session 30 days, auth 5/10, API 10/20
+- ✅ Custom: All values configurable and applied correctly
+- ✅ Invalid: Falls back to defaults, logs warnings
+- ✅ Unusual: Applies value, logs configuration warning
+- ✅ No regressions: Existing functionality unchanged
+
+---
+
 ### 17. Audit Trail Support ✅ **COMPLETED (v1.3.0)**
 **Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) and [VERSION.md](VERSION.md) for details
 

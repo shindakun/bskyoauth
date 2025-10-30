@@ -6,18 +6,91 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/time/rate"
 
 	"github.com/shindakun/bskyoauth"
 	"github.com/shindakun/bskyoauth/lexicon"
 )
 
+// getEnvInt returns an integer environment variable or default value.
+// Logs a warning if the value is set but invalid.
+func getEnvInt(key string, defaultVal int) int {
+	if val := os.Getenv(key); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil {
+			return parsed
+		}
+		log.Printf("⚠️  Warning: Invalid %s value '%s', using default: %d", key, val, defaultVal)
+	}
+	return defaultVal
+}
+
+// getRateLimitConfig parses "requests/sec,burst" format (e.g., "5,10").
+// Returns default values if parsing fails or env var is not set.
+func getRateLimitConfig(key string, defaultReqSec float64, defaultBurst int) (float64, int) {
+	if val := os.Getenv(key); val != "" {
+		parts := strings.Split(val, ",")
+		if len(parts) == 2 {
+			reqSec, err1 := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+			burst, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+			if err1 == nil && err2 == nil && reqSec > 0 && burst > 0 {
+				return reqSec, burst
+			}
+		}
+		log.Printf("⚠️  Warning: Invalid %s format '%s' (expected 'req/sec,burst'), using defaults: %.0f,%d", key, val, defaultReqSec, defaultBurst)
+	}
+	return defaultReqSec, defaultBurst
+}
+
+// validateConfig checks configuration values and logs warnings for unusual settings.
+func validateConfig(sessionTimeoutDays int, authReqSec, apiReqSec float64, authBurst, apiBurst int) {
+	warnings := []string{}
+
+	if sessionTimeoutDays < 1 || sessionTimeoutDays > 365 {
+		warnings = append(warnings, fmt.Sprintf("SESSION_TIMEOUT_DAYS=%d is unusual (expected 1-365)", sessionTimeoutDays))
+	}
+
+	if authReqSec < 0.1 || authReqSec > 100 {
+		warnings = append(warnings, fmt.Sprintf("RATE_LIMIT_AUTH requests/sec=%.1f is unusual (expected 0.1-100)", authReqSec))
+	}
+
+	if apiReqSec < 0.1 || apiReqSec > 1000 {
+		warnings = append(warnings, fmt.Sprintf("RATE_LIMIT_API requests/sec=%.1f is unusual (expected 0.1-1000)", apiReqSec))
+	}
+
+	if authBurst < 1 || apiBurst < 1 {
+		warnings = append(warnings, "Rate limit burst values must be positive")
+	}
+
+	if len(warnings) > 0 {
+		log.Println("⚠️  Configuration warnings:")
+		for _, w := range warnings {
+			log.Printf("   - %s", w)
+		}
+	}
+}
+
 func main() {
+	// Load configuration from environment variables
 	baseURL := os.Getenv("BASE_URL")
 	if baseURL == "" {
 		baseURL = "http://localhost:8181"
 	}
+
+	serverPort := os.Getenv("SERVER_PORT")
+	if serverPort == "" {
+		serverPort = "8181"
+	}
+
+	sessionTimeoutDays := getEnvInt("SESSION_TIMEOUT_DAYS", 30)
+	authReqSec, authBurst := getRateLimitConfig("RATE_LIMIT_AUTH", 5, 10)
+	apiReqSec, apiBurst := getRateLimitConfig("RATE_LIMIT_API", 10, 20)
+
+	// Validate configuration and log warnings for unusual values
+	validateConfig(sessionTimeoutDays, authReqSec, apiReqSec, authBurst, apiBurst)
 
 	// Configure structured logging based on environment
 	logger := bskyoauth.NewLoggerFromEnv(baseURL)
@@ -43,12 +116,12 @@ func main() {
 	})
 
 	// Create rate limiters for different endpoint types
-	// Login/callback: 5 requests per second, burst of 10 (prevent brute force)
-	authLimiter := bskyoauth.NewRateLimiter(5, 10)
+	// Auth endpoints (login/callback): Prevent brute force attacks
+	authLimiter := bskyoauth.NewRateLimiter(rate.Limit(authReqSec), authBurst)
 	authLimiter.StartCleanup(5*time.Minute, 10*time.Minute)
 
-	// API operations: 10 requests per second, burst of 20 (normal usage)
-	apiLimiter := bskyoauth.NewRateLimiter(10, 20)
+	// API endpoints: Normal usage rate limiting
+	apiLimiter := bskyoauth.NewRateLimiter(rate.Limit(apiReqSec), apiBurst)
 	apiLimiter.StartCleanup(5*time.Minute, 10*time.Minute)
 
 	// Set up HTTP handlers with rate limiting
@@ -56,7 +129,7 @@ func main() {
 	mux.HandleFunc("/", homeHandler(client))
 	mux.HandleFunc("/client-metadata.json", client.ClientMetadataHandler())
 	mux.HandleFunc("/login", authLimiter.Middleware(loginHandler(client)))
-	mux.HandleFunc("/callback", authLimiter.Middleware(client.CallbackHandler(callbackSuccessHandler)))
+	mux.HandleFunc("/callback", authLimiter.Middleware(client.CallbackHandler(callbackSuccessHandler(sessionTimeoutDays))))
 	mux.HandleFunc("/post", apiLimiter.Middleware(postHandler(client)))
 	mux.HandleFunc("/create-record", apiLimiter.Middleware(createRecordHandler(client)))
 	mux.HandleFunc("/delete-record", apiLimiter.Middleware(deleteRecordHandler(client)))
@@ -66,7 +139,8 @@ func main() {
 	// Apply security headers middleware
 	handler := bskyoauth.SecurityHeadersMiddleware()(mux)
 
-	log.Println("Server starting on :8181")
+	// Display configuration
+	log.Printf("Server starting on :%s", serverPort)
 	log.Println("Base URL:", baseURL)
 	if strings.HasPrefix(baseURL, "https://") {
 		log.Println("✓ Using HTTPS - secure configuration")
@@ -80,8 +154,9 @@ func main() {
 	}
 
 	log.Println("✓ Rate limiting enabled:")
-	log.Println("  - Auth endpoints: 5 req/s (burst: 10)")
-	log.Println("  - API endpoints: 10 req/s (burst: 20)")
+	log.Printf("  - Auth endpoints: %.0f req/s (burst: %d)", authReqSec, authBurst)
+	log.Printf("  - API endpoints: %.0f req/s (burst: %d)", apiReqSec, apiBurst)
+	log.Printf("✓ Session timeout: %d days", sessionTimeoutDays)
 	log.Println("✓ Security headers enabled (auto-detects localhost)")
 	log.Println("✓ HTTP timeouts configured:")
 	log.Println("  - Client requests: 30s total timeout")
@@ -89,7 +164,7 @@ func main() {
 
 	// Configure HTTP server with timeouts to prevent resource exhaustion attacks
 	server := &http.Server{
-		Addr:         ":8181",
+		Addr:         ":" + serverPort,
 		Handler:      handler,
 		ReadTimeout:  15 * time.Second, // Time to read request headers and body
 		WriteTimeout: 15 * time.Second, // Time to write response
@@ -306,30 +381,32 @@ func loginHandler(client *bskyoauth.Client) http.HandlerFunc {
 	}
 }
 
-func callbackSuccessHandler(w http.ResponseWriter, r *http.Request, sessionID string) {
-	// Add request ID for correlation
-	requestID := bskyoauth.GenerateRequestID()
-	log.Printf("[%s] OAuth callback successful, session: %s", requestID, sessionID)
+func callbackSuccessHandler(sessionTimeoutDays int) func(http.ResponseWriter, *http.Request, string) {
+	return func(w http.ResponseWriter, r *http.Request, sessionID string) {
+		// Add request ID for correlation
+		requestID := bskyoauth.GenerateRequestID()
+		log.Printf("[%s] OAuth callback successful, session: %s", requestID, sessionID)
 
-	// Determine if we're running in secure mode (HTTPS)
-	baseURL := os.Getenv("BASE_URL")
-	if baseURL == "" {
-		baseURL = "http://localhost:8181"
+		// Determine if we're running in secure mode (HTTPS)
+		baseURL := os.Getenv("BASE_URL")
+		if baseURL == "" {
+			baseURL = "http://localhost:8181"
+		}
+		isSecure := strings.HasPrefix(baseURL, "https://")
+
+		// Set session cookie with security enhancements
+		http.SetCookie(w, &http.Cookie{
+			Name:     "session_id",
+			Value:    sessionID,
+			Path:     "/",
+			HttpOnly: true,                       // Prevents JavaScript access
+			Secure:   isSecure,                   // HTTPS only in production
+			SameSite: http.SameSiteLaxMode,       // CSRF protection
+			MaxAge:   sessionTimeoutDays * 86400, // Convert days to seconds
+		})
+
+		http.Redirect(w, r, "/", http.StatusFound)
 	}
-	isSecure := strings.HasPrefix(baseURL, "https://")
-
-	// Set session cookie with security enhancements
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_id",
-		Value:    sessionID,
-		Path:     "/",
-		HttpOnly: true,                 // Prevents JavaScript access
-		Secure:   isSecure,             // HTTPS only in production
-		SameSite: http.SameSiteLaxMode, // CSRF protection
-		MaxAge:   2592000,              // 30 days (configurable)
-	})
-
-	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 func postHandler(client *bskyoauth.Client) http.HandlerFunc {

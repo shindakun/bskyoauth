@@ -9,7 +9,55 @@ This document tracks version changes for the bskyoauth module.
 - **Minor version (v1.x.0)**: New features, non-breaking enhancements
 - **Patch version (v1.0.x)**: Bug fixes, documentation updates, internal improvements
 
-## Current Version: v1.3.0
+## Current Version: v1.3.1
+
+### v1.3.1 (2025-10-29)
+
+**Patch release** - Environment variable configuration for web-demo example
+
+#### Enhancements
+
+**Environment Variable Configuration:**
+- Added 4 configurable environment variables for the example application
+- `SESSION_TIMEOUT_DAYS` - Session cookie lifetime (default: 30 days)
+- `RATE_LIMIT_AUTH` - Auth endpoint rate limits (default: 5,10)
+- `RATE_LIMIT_API` - API endpoint rate limits (default: 10,20)
+- `SERVER_PORT` - HTTP server port (default: 8181)
+
+**Configuration Validation:**
+- Automatic validation on startup with warnings for unusual values
+- Graceful fallback to defaults for invalid values
+- Clear error messages with expected format guidance
+
+**Helper Functions:**
+- `getEnvInt()` - Parse integer environment variables with defaults
+- `getRateLimitConfig()` - Parse "requests/sec,burst" format
+- `validateConfig()` - Validate configuration ranges and log warnings
+
+**Documentation:**
+- Comprehensive environment variable reference in README
+- Example configurations for dev, staging, production, and high-traffic scenarios
+- Docker, Docker Compose, and Kubernetes deployment examples
+- Rate limiting and session timeout guidelines
+
+#### Files Modified
+- `examples/web-demo/main.go` - Added environment variable parsing and validation (~70 lines)
+- `README.md` - Added "Environment Variables" section (~185 lines)
+- `TODO.md` - Removed Issue #18
+- `COMPLETED_ISSUES.md` - Added Issue #18 with implementation details
+- `VERSION.md` - Added v1.3.1 release notes
+
+#### Impact
+- **No Library Changes**: Example application only (100% backward compatible)
+- **Sensible Defaults**: All variables are optional, existing deployments unaffected
+- **Production-Ready**: Enables per-environment configuration without code changes
+- **12-Factor Compliant**: Environment-based configuration for containers/orchestration
+
+#### Issue Resolution
+- Resolves Issue #18: Environment Configuration
+- Moved to COMPLETED_ISSUES.md
+
+---
 
 ### v1.3.0 (2025-10-29)
 

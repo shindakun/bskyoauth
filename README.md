@@ -1594,9 +1594,185 @@ BASE_URL=https://abc123.ngrok.app go run main.go
 
 ## Environment Variables
 
-The example application supports:
+The example application (`examples/web-demo`) supports configuration via environment variables for deployment flexibility.
 
-- `BASE_URL` - Base URL for OAuth client (default: `http://localhost:8181`)
+### Required
+
+- **`BASE_URL`** - Base URL for OAuth callbacks
+  - Example: `https://myapp.com` or `http://localhost:8181`
+  - Default: `http://localhost:8181`
+
+### Optional Configuration
+
+All optional environment variables have sensible defaults. Only override if you need custom values for your deployment.
+
+#### Session Management
+
+- **`SESSION_TIMEOUT_DAYS`** - Session cookie lifetime in days
+  - Default: `30`
+  - Range: 1-365 days (warnings logged outside this range)
+  - Example: `SESSION_TIMEOUT_DAYS=7` for 7-day sessions
+  - Note: Shorter timeouts improve security, longer improves convenience
+
+#### Rate Limiting
+
+- **`RATE_LIMIT_AUTH`** - Auth endpoint rate limit as `requests/sec,burst`
+  - Default: `5,10`
+  - Format: `requests_per_second,burst_size`
+  - Example: `RATE_LIMIT_AUTH=10,20` for stricter limits
+  - Applies to: `/login`, `/callback` endpoints
+  - Purpose: Prevent brute force attacks on authentication
+
+- **`RATE_LIMIT_API`** - API endpoint rate limit as `requests/sec,burst`
+  - Default: `10,20`
+  - Format: `requests_per_second,burst_size`
+  - Example: `RATE_LIMIT_API=50,100` for higher throughput
+  - Applies to: `/post`, `/create-record`, `/delete-record`, `/get-record` endpoints
+  - Purpose: Prevent API abuse while allowing normal usage
+
+#### Server Configuration
+
+- **`SERVER_PORT`** - HTTP server port
+  - Default: `8181`
+  - Example: `SERVER_PORT=8080`
+  - Useful for container orchestration or avoiding port conflicts
+
+### Example Configurations
+
+#### Development
+
+```bash
+BASE_URL=http://localhost:8181
+SESSION_TIMEOUT_DAYS=7           # Shorter for testing
+RATE_LIMIT_AUTH=10,20            # More permissive
+RATE_LIMIT_API=50,100            # Higher for local testing
+SERVER_PORT=8181
+```
+
+#### Staging
+
+```bash
+BASE_URL=https://staging.myapp.com
+SESSION_TIMEOUT_DAYS=14          # Medium timeout
+RATE_LIMIT_AUTH=5,10             # Production-like
+RATE_LIMIT_API=20,40             # Moderate limits
+SERVER_PORT=8080
+```
+
+#### Production
+
+```bash
+BASE_URL=https://myapp.com
+SESSION_TIMEOUT_DAYS=30          # Standard (default)
+RATE_LIMIT_AUTH=5,10             # Strict (default)
+RATE_LIMIT_API=10,20             # Conservative (default)
+SERVER_PORT=8080
+```
+
+#### High-Traffic Production
+
+```bash
+BASE_URL=https://myapp.com
+SESSION_TIMEOUT_DAYS=30
+RATE_LIMIT_AUTH=10,30            # More permissive for high traffic
+RATE_LIMIT_API=100,200           # Much higher throughput
+SERVER_PORT=8080
+```
+
+### Configuration Validation
+
+The application automatically validates configuration on startup:
+
+- **Invalid values**: Falls back to defaults and logs warnings
+- **Unusual values**: Logs warnings but applies the value
+- **Format errors**: Logs clear error messages with expected format
+
+**Example validation output:**
+```
+⚠️  Warning: Invalid SESSION_TIMEOUT_DAYS value 'abc', using default: 30
+⚠️  Warning: Invalid RATE_LIMIT_AUTH format '5' (expected 'req/sec,burst'), using defaults: 5,10
+⚠️  Configuration warnings:
+   - SESSION_TIMEOUT_DAYS=400 is unusual (expected 1-365)
+   - RATE_LIMIT_API requests/sec=5000.0 is unusual (expected 0.1-1000)
+```
+
+### Running with Custom Configuration
+
+**Command line:**
+```bash
+BASE_URL=https://myapp.com SESSION_TIMEOUT_DAYS=14 go run examples/web-demo/main.go
+```
+
+**Environment file:**
+```bash
+# .env
+BASE_URL=https://myapp.com
+SESSION_TIMEOUT_DAYS=14
+RATE_LIMIT_AUTH=10,20
+RATE_LIMIT_API=50,100
+SERVER_PORT=8080
+```
+
+```bash
+source .env
+go run examples/web-demo/main.go
+```
+
+**Docker:**
+```dockerfile
+ENV BASE_URL=https://myapp.com
+ENV SESSION_TIMEOUT_DAYS=30
+ENV RATE_LIMIT_AUTH=5,10
+ENV RATE_LIMIT_API=20,40
+ENV SERVER_PORT=8080
+```
+
+**Docker Compose:**
+```yaml
+services:
+  app:
+    environment:
+      - BASE_URL=https://myapp.com
+      - SESSION_TIMEOUT_DAYS=30
+      - RATE_LIMIT_AUTH=5,10
+      - RATE_LIMIT_API=20,40
+      - SERVER_PORT=8080
+```
+
+**Kubernetes:**
+```yaml
+env:
+  - name: BASE_URL
+    value: "https://myapp.com"
+  - name: SESSION_TIMEOUT_DAYS
+    value: "30"
+  - name: RATE_LIMIT_AUTH
+    value: "5,10"
+  - name: RATE_LIMIT_API
+    value: "20,40"
+  - name: SERVER_PORT
+    value: "8080"
+```
+
+### Rate Limiting Guidelines
+
+**Auth Endpoints (login/callback):**
+- **Conservative (default)**: 5 req/s, burst 10 - Prevents brute force, minimal false positives
+- **Strict**: 2 req/s, burst 5 - Maximum security, may affect legitimate retries
+- **Permissive**: 10 req/s, burst 20 - High-traffic sites with good monitoring
+
+**API Endpoints (post/create/delete/get):**
+- **Conservative (default)**: 10 req/s, burst 20 - Prevents abuse, handles normal usage
+- **Low-traffic**: 5 req/s, burst 10 - Resource-constrained environments
+- **High-traffic**: 50-100 req/s, burst 100-200 - Large user base, active usage
+
+### Session Timeout Guidelines
+
+- **7 days**: High-security environments, sensitive data
+- **14 days**: Balanced security and convenience
+- **30 days (default)**: Standard web applications
+- **60-90 days**: Low-risk applications, convenience-focused
+- **365 days**: Not recommended (configure if absolutely required)
 
 ## Contributing
 
