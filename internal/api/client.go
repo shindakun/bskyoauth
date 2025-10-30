@@ -13,6 +13,8 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/lex/util"
 	"github.com/bluesky-social/indigo/xrpc"
+
+	_ "github.com/shindakun/bskyoauth/lexicon" // Register custom lexicons
 )
 
 // Logger interface for API operations

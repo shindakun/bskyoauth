@@ -10,6 +10,7 @@ import (
 
 	"github.com/shindakun/bskyoauth/internal/api"
 	internalhttp "github.com/shindakun/bskyoauth/internal/http"
+	_ "github.com/shindakun/bskyoauth/lexicon" // Register custom lexicons
 )
 
 // NewClient creates a new Bluesky OAuth client with default settings.

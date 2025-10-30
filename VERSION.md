@@ -76,6 +76,57 @@ This document tracks version changes for the bskyoauth module.
 
 Track minor version changes here for future releases.
 
+### v1.1.1 (2025-10-29)
+
+**Bug Fixes**
+- Fixed GetRecord to work with custom lexicon types (com.demo.bskyoauth)
+- Resolved "unrecognized lexicon type" error by implementing proper type registration
+
+**New Package: lexicon**
+- `lexicon.DemoRecord` - Typed struct for com.demo.bskyoauth records
+- Full CBOR marshaling/unmarshaling support
+- Automatic type registration with indigo library
+- Validation methods for required fields
+
+**New Files**
+- `lexicon/demo.go` - DemoRecord type definition with CBOR methods (~200 lines)
+- `lexicon/validation.go` - Field validation (text length, RFC3339 timestamps)
+- `lexicon/demo_test.go` - Comprehensive unit tests for marshaling and validation
+- `lexicons/com/demo/bskyoauth.json` - AT Protocol lexicon JSON schema
+
+**Implementation Details**
+- Defined DemoRecord struct with JSON and CBOR tags following AT Protocol standards
+- Implemented MarshalCBOR() and UnmarshalCBOR() methods manually
+- Registered type in init() function for automatic discovery
+- GetRecord now properly decodes custom lexicon types
+- Added validation for text length (max 10000 bytes / 3000 graphemes)
+- Added validation for RFC3339 timestamp format
+
+**API Enhancements**
+- `DemoRecord.Validate()` - Validates all required fields
+- CreateRecord accepts both `map[string]interface{}` and typed `*lexicon.DemoRecord`
+- GetRecord returns `map[string]interface{}` compatible with lexicon types
+- Example updated to use typed DemoRecord for better type safety
+
+**Testing**
+- 15+ unit tests for CBOR marshaling/unmarshaling
+- Round-trip testing for data integrity
+- Validation tests for all edge cases
+- Unicode and long text handling verified
+
+**Backward Compatibility**
+- ✅ 100% backward compatible with v1.1.0
+- ✅ CreateRecord still accepts `map[string]interface{}`
+- ✅ GetRecord API unchanged
+- ✅ Existing code continues to work without modifications
+- ✅ Optional: Import `lexicon` package for typed access
+
+**Developer Experience**
+- Type-safe record creation with lexicon.DemoRecord
+- Clear error messages for validation failures
+- Follows AT Protocol lexicon best practices
+- Foundation for adding more custom record types
+
 ### v1.1.0 (2025-10-29)
 
 **New Features**

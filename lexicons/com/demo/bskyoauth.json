@@ -1,0 +1,28 @@
+{
+  "lexicon": 1,
+  "id": "com.demo.bskyoauth",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A demonstration record type for the bskyoauth library",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["text", "createdAt"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The content of the record",
+            "maxLength": 10000,
+            "maxGraphemes": 3000
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Client-declared timestamp when this record was originally created"
+          }
+        }
+      }
+    }
+  }
+}

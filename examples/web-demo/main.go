@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/shindakun/bskyoauth"
+	"github.com/shindakun/bskyoauth/lexicon"
 )
 
 func main() {
@@ -364,12 +365,26 @@ func createRecordHandler(client *bskyoauth.Client) http.HandlerFunc {
 			return
 		}
 
-		record := map[string]interface{}{
-			"text":      text,
-			"createdAt": time.Now().Format(time.RFC3339),
+		// Create record using typed lexicon struct (demonstrates lexicon package usage)
+		record := &lexicon.DemoRecord{
+			LexiconTypeID: "com.demo.bskyoauth",
+			Text:          text,
+			CreatedAt:     time.Now().Format(time.RFC3339),
 		}
 
-		output, err := client.CreateRecord(r.Context(), session, "com.demo.bskyoauth", record)
+		// Validate the record before creating
+		if err := record.Validate(); err != nil {
+			http.Error(w, fmt.Sprintf("Invalid record: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		// Convert to map for CreateRecord API
+		recordMap := map[string]interface{}{
+			"text":      record.Text,
+			"createdAt": record.CreatedAt,
+		}
+
+		output, err := client.CreateRecord(r.Context(), session, "com.demo.bskyoauth", recordMap)
 		if err != nil {
 			// Check if error is due to expired token
 			if strings.Contains(err.Error(), "invalid_token") && strings.Contains(err.Error(), "401") {
@@ -396,7 +411,7 @@ func createRecordHandler(client *bskyoauth.Client) http.HandlerFunc {
 				log.Printf("[%s] Token refreshed, retrying CreateRecord", requestID)
 
 				// Retry CreateRecord with new token
-				output, err = client.CreateRecord(r.Context(), newSession, "com.demo.bskyoauth", record)
+				output, err = client.CreateRecord(r.Context(), newSession, "com.demo.bskyoauth", recordMap)
 				if err != nil {
 					http.Error(w, "Failed to create record: "+err.Error(), http.StatusInternalServerError)
 					return
