@@ -175,7 +175,7 @@ func (c *Client) StartAuthFlow(ctx context.Context, handle string) (*AuthFlowSta
 	q.Set("client_id", c.ClientID)
 	q.Set("redirect_uri", c.RedirectURI)
 	q.Set("response_type", "code")
-	q.Set("scope", "atproto transition:generic")
+	q.Set("scope", strings.Join(c.Scopes, " "))
 	q.Set("state", state)
 	q.Set("code_challenge", codeChallenge)
 	q.Set("code_challenge_method", "S256")

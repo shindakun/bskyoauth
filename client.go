@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/bluesky-social/indigo/api/atproto"
@@ -315,7 +316,7 @@ func (c *Client) GetClientMetadata() map[string]interface{} {
 		"client_id":                  c.ClientID,
 		"client_name":                c.ClientName,
 		"redirect_uris":              []string{c.RedirectURI},
-		"scope":                      "atproto transition:generic",
+		"scope":                      strings.Join(c.Scopes, " "),
 		"grant_types":                []string{"authorization_code", "refresh_token"},
 		"response_types":             []string{"code"},
 		"token_endpoint_auth_method": "none",
