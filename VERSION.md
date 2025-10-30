@@ -76,6 +76,42 @@ This document tracks version changes for the bskyoauth module.
 
 Track minor version changes here for future releases.
 
+### v1.1.3 (2025-10-29)
+
+**Cleanup**
+- Removed empty jwt.go file from root directory
+- JWT functionality remains available in internal/jwt package (unchanged)
+- Pure housekeeping cleanup from Phase 1 refactoring
+
+**Documentation Updates**
+- CHANGELOG.md: Updated JWT reference to point to internal/jwt
+- TODO.md: Clarified that JWT code is internal-only per AT Protocol spec
+- Removed outdated references to jwt.go and jwt_test.go
+
+**Technical Details**
+- jwt.go contained only `package bskyoauth` declaration (1 line, no content)
+- File was leftover from Phase 1 refactoring when JWT moved to internal/
+- Actual JWT verification code remains in internal/jwt/verify.go (unchanged)
+- internal/jwt package is used internally by the library
+
+**No Functional Changes**
+- ✅ No API changes
+- ✅ No behavior changes
+- ✅ No new features
+- ✅ No bug fixes
+- ✅ Pure cleanup of empty file
+
+**Backward Compatibility**
+- ✅ 100% compatible with v1.1.2
+- ✅ No breaking changes
+- ✅ jwt.go was empty, removal has zero impact
+- ✅ All existing code continues to work
+
+**Why This Matters**
+- Cleaner codebase without confusing empty files
+- Accurate documentation reflecting current structure
+- Clear indication that JWT is internal-only (per AT Protocol OAuth spec)
+
 ### v1.1.2 (2025-10-29)
 
 **Enhancements**

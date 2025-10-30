@@ -97,8 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 11 comprehensive test cases for logger functionality
 - Added `DID` field to `internalOAuthState` for reliable session creation
 - Added `JWKSURI` field to `AuthServerMetadata` (not currently used, reserved for future)
-- Comprehensive JWT validation module (jwt.go) remains available for future use or custom implementations
-- JWT test suite (jwt_test.go) provides examples of token validation if needed
+- JWT validation functionality is available in internal/jwt package
 - OAuth state store now includes automatic expiration and cleanup mechanism
 - **SECURITY**: Added comprehensive input validation module (validation.go)
   - Handle format validation using AT Protocol syntax package

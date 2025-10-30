@@ -204,8 +204,8 @@ Per the [AT Protocol OAuth specification](https://atproto.com/specs/oauth), **ac
 - No signature verification or claim validation performed
 
 **Available Resources:**
-- jwt.go and jwt_test.go remain in codebase for reference or custom implementations
-- Full JWT validation example code available if needed for other purposes
+- JWT verification code is in internal/jwt package for internal use only
+- Not exposed in public API per AT Protocol OAuth specification
 
 **Impact:** This is the CORRECT behavior per AT Protocol specification. Client-side JWT validation would be redundant and against spec.
 
