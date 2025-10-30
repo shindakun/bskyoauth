@@ -9,7 +9,100 @@ This document tracks version changes for the bskyoauth module.
 - **Minor version (v1.x.0)**: New features, non-breaking enhancements
 - **Patch version (v1.0.x)**: Bug fixes, documentation updates, internal improvements
 
-## Current Version: v1.0.0
+## Current Version: v1.1.4
+
+### v1.1.4 (2025-10-29)
+
+**Documentation maintenance release** - Archived completed TODO issues
+
+#### Changes
+- Archived all completed security issues from TODO.md to new COMPLETED_ISSUES.md
+- Reduced TODO.md from 757 lines to 220 lines (71% reduction)
+- Improved TODO.md focus by keeping only active work items
+- Added cross-reference links between TODO.md and COMPLETED_ISSUES.md
+- Preserved historical documentation of all completed security improvements
+
+#### Impact
+- **Documentation**: Cleaner, more actionable TODO list
+- **Maintainability**: Easier to identify pending work vs completed issues
+- **Historical Record**: All completed work preserved in COMPLETED_ISSUES.md
+- **Zero functional changes**: Documentation-only release
+
+---
+
+### v1.1.3 (2025-10-29)
+
+**Maintenance release** - Removed empty jwt.go file
+
+#### Changes
+- Removed empty jwt.go file (only contained package declaration)
+- Updated CHANGELOG.md references to clarify JWT code is in internal/jwt
+- Updated TODO.md to note JWT functionality is internal-only per AT Protocol spec
+- Clarified that access tokens are treated as opaque per specification
+
+#### Impact
+- **Code Cleanup**: Removed unnecessary empty file
+- **Documentation**: Clearer guidance on JWT handling
+- **No Breaking Changes**: JWT verification remains available in internal/jwt package
+
+---
+
+### v1.1.2 (2025-10-29)
+
+**Minor feature release** - Display record ID in web demo
+
+#### Features
+- Added record ID display in web-demo after creating custom records
+- New success page shows AT URI and rkey immediately after creation
+- Added quick action buttons: View Record (JSON), Delete Record, Create Another
+- New utility function `extractRkeyFromURI()` for parsing record keys
+- Improved user experience by eliminating need to check server logs
+
+#### Web Demo Enhancements
+- Eliminated redirect after record creation
+- Display full AT URI: `at://did:plc:abc.../com.demo.bskyoauth/rkey`
+- Copyable record key (rkey) with user-select CSS
+- One-click access to view and delete newly created records
+- Styled success page matching existing web-demo design
+
+#### Impact
+- **User Experience**: Immediate feedback on record creation
+- **Usability**: Easy access to record operations
+- **No Breaking Changes**: Only affects web-demo example, library unchanged
+
+---
+
+### v1.1.1 (2025-10-29)
+
+**Minor feature release** - Lexicon support for custom records
+
+#### Features
+- Added proper AT Protocol lexicon support for custom record types
+- Created `lexicon` package with `DemoRecord` type
+- Implemented CBOR marshaling/unmarshaling for custom records
+- Added lexicon JSON schema at `lexicons/com/demo/bskyoauth.json`
+- Automatic type registration with indigo library via `init()`
+- Field validation for lexicon records (text length, timestamps)
+
+#### New Files
+- `lexicon/demo.go` - DemoRecord type with CBOR methods
+- `lexicon/validation.go` - Field validation for DemoRecord
+- `lexicon/demo_test.go` - Comprehensive test coverage (15+ tests)
+- `lexicons/com/demo/bskyoauth.json` - AT Protocol lexicon schema
+
+#### Changes
+- Updated `client.go` with blank import to trigger lexicon registration
+- Updated `internal/api/client.go` with lexicon registration
+- Updated `examples/web-demo/main.go` to use typed `DemoRecord`
+- GetRecord now works with custom lexicon types
+
+#### Impact
+- **Correctness**: Proper AT Protocol lexicon implementation
+- **Type Safety**: Typed records instead of generic maps
+- **Validation**: Built-in field validation for custom records
+- **No Breaking Changes**: Existing code continues to work
+
+---
 
 ### v1.0.0 (2025-10-29)
 
