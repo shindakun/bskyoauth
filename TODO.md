@@ -19,19 +19,6 @@ This security audit identified multiple areas for improvement in the bskyoauth l
 
 ## Low Priority / Best Practices
 
-### 16. DPoP Key Storage Considerations
-**File:** [types.go:19-20](types.go#L19-L20)
-
-**Issue:** DPoP private keys stored in memory only. Lost on application restart.
-
-**Recommendation:**
-- Document key lifecycle expectations
-- Consider encrypted key persistence for long-lived sessions
-- Provide guidance on key rotation
-- Note: Current design may be intentional for ephemeral keys
-
----
-
 ### 17. Missing Audit Trail
 **Issue:** No audit log for sensitive operations.
 

@@ -8,6 +8,43 @@ All completed issues are documented in [CHANGELOG.md](CHANGELOG.md) with version
 
 ## COMPLETED ISSUES
 
+### 16. DPoP Key Storage Considerations ✅ **COMPLETED (v1.2.1)**
+**Status:** RESOLVED via comprehensive documentation - See [README.md](README.md#dpop-key-persistence-and-security-considerations)
+
+**Issue:** DPoP private keys stored in memory only. Lost on application restart.
+
+**Resolution:**
+Resolved through **enhanced documentation** rather than code implementation. Ephemeral DPoP keys are **intentional** and align with OAuth 2.0 security best practices.
+
+**Documentation Added (v1.2.1):**
+- ✅ New README section: "DPoP Key Persistence and Security Considerations"
+- ✅ Security trade-offs table (Ephemeral vs Persisted vs Hybrid)
+- ✅ Three implementation options with complete code examples:
+  1. **Option 1**: Ephemeral Keys (Default - Recommended for most apps)
+  2. **Option 2**: Hybrid Approach (Recommended for production - ephemeral keys + token refresh)
+  3. **Option 3**: Encrypted Persistence (Advanced - for mobile/desktop apps)
+- ✅ Complete SecureRedisSessionStore implementation with AES-256-GCM encryption
+- ✅ Security requirements checklist (encryption, key management, storage, monitoring)
+- ✅ Key rotation guidance
+- ✅ Summary recommendations by scenario (web/API/mobile/desktop)
+- ✅ Warning added to simple Redis example about plaintext key storage
+
+**Why Documentation Over Implementation:**
+1. **Security Decision**: Persisting keys is a security trade-off users must consciously make
+2. **Interface Already Exists**: `SessionStore` allows any persistence strategy
+3. **Use Case Varies**: Different applications have different security/UX requirements
+4. **Encryption Key Management**: Library can't safely manage encryption keys for users
+5. **Current Design is Correct**: Ephemeral keys are OAuth 2.0 best practice
+
+**Key Benefits:**
+- **Ephemeral keys** (default): Maximum security, zero storage risk
+- **Token refresh**: Extends sessions without persisting keys
+- **Encrypted option**: Available for apps that truly need persistence
+
+**Impact:** Users now have clear guidance on DPoP key lifecycle, security trade-offs, and implementation options for their specific use case. Default behavior remains secure-by-default with ephemeral keys.
+
+---
+
 ### 15. Add Security Testing ✅ **COMPLETED (v1.2.0)**
 **Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) and [VERSION.md](VERSION.md) for details
 

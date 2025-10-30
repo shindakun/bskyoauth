@@ -9,7 +9,52 @@ This document tracks version changes for the bskyoauth module.
 - **Minor version (v1.x.0)**: New features, non-breaking enhancements
 - **Patch version (v1.0.x)**: Bug fixes, documentation updates, internal improvements
 
-## Current Version: v1.2.0
+## Current Version: v1.2.1
+
+### v1.2.1 (2025-10-29)
+
+**Patch release** - DPoP key persistence documentation and security guidance
+
+#### Documentation Enhancements
+- Added comprehensive "DPoP Key Persistence and Security Considerations" section to README
+- Security trade-offs comparison table (Ephemeral vs Persisted vs Hybrid approaches)
+- Three implementation options with complete code examples
+- Added security warning to simple Redis example about plaintext key storage
+
+#### New Documentation Content
+1. **Option 1: Ephemeral Keys (Default)**
+   - Recommended for most applications
+   - Maximum security - keys never persisted
+   - Automatic key rotation
+
+2. **Option 2: Hybrid Approach (Recommended for Production)**
+   - Best of both worlds
+   - Ephemeral keys + token refresh for extended sessions
+   - No encryption key management needed
+
+3. **Option 3: Encrypted Persistence (Advanced)**
+   - Complete SecureRedisSessionStore implementation
+   - AES-256-GCM encryption example (~140 lines)
+   - Security requirements checklist
+   - Key management best practices
+
+#### Additional Guidance
+- Key rotation policy recommendations
+- Summary recommendations by scenario (web/API/mobile/desktop)
+- Security requirements for persisted keys
+- Monitoring and alerting guidance
+
+#### Issue Resolution
+- Resolves Issue #16: DPoP Key Storage Considerations
+- Moved to COMPLETED_ISSUES.md with comprehensive resolution notes
+
+#### Impact
+- **No Code Changes**: Documentation only
+- **No Breaking Changes**: 100% backward compatible
+- **Security by Default**: Ephemeral keys remain the default (secure)
+- **User Choice**: Clear guidance for teams needing persistence
+
+---
 
 ### v1.2.0 (2025-10-29)
 

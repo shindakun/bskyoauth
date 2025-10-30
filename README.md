@@ -193,6 +193,8 @@ type SessionStore interface {
 
 Example with Redis:
 
+> **⚠️ Security Warning**: This example marshals the entire `Session` struct including the DPoP private key in plaintext. This is suitable for **development only**. For production deployments, see [DPoP Key Persistence and Security Considerations](#dpop-key-persistence-and-security-considerations) below for secure key handling.
+
 ```go
 type RedisSessionStore struct {
     client *redis.Client
@@ -270,6 +272,301 @@ http.SetCookie(w, &http.Cookie{
 ```go
 defer store.Stop()  // Stop cleanup goroutine when shutting down
 ```
+
+### DPoP Key Persistence and Security Considerations
+
+The `Session` struct includes a `DPoPKey` field containing an ECDSA P-256 private key used for DPoP (Demonstrating Proof-of-Possession) token binding. By default, this key is **ephemeral** (exists only in memory) and is lost on application restart. **This is a security feature** that limits the blast radius if storage is compromised.
+
+#### Security Trade-offs
+
+| Approach | Security | User Experience | Use Case |
+|----------|----------|-----------------|----------|
+| **Ephemeral Keys** (Default) | ✅ High - keys never persisted | ⚠️ Users must re-authenticate after restart | Recommended for most applications |
+| **Persisted Keys** | ⚠️ Lower - keys stored (encrypted) | ✅ Users stay logged in after restart | Long-running mobile/desktop apps |
+| **Hybrid** | ✅ Good - keys temporary, tokens refreshed | ✅ Good - tokens extend sessions | **Recommended for production** |
+
+#### Option 1: Ephemeral Keys (Default - Recommended)
+
+With `MemorySessionStore`, DPoP keys are ephemeral:
+
+```go
+// Keys generated fresh for each OAuth flow
+client := bskyoauth.NewClient("https://example.com")
+flowState, _ := client.StartAuthFlow(ctx, handle)  // New DPoP key created
+session, _ := client.CompleteAuthFlow(ctx, code, state, issuer)
+
+// session.DPoPKey exists only in memory
+// Lost on application restart
+```
+
+**Benefits:**
+- ✅ Maximum security - keys can't be stolen from storage
+- ✅ Automatic key rotation on each authentication
+- ✅ Zero risk from compromised Redis/database
+- ✅ Complies with OAuth 2.0 security best practices
+
+**Drawback:**
+- ⚠️ Users must re-authenticate after application restart
+
+**Recommended for:**
+- Web applications
+- API services
+- Short-lived sessions
+- Security-critical applications
+
+#### Option 2: Hybrid Approach (Recommended for Production)
+
+Best of both worlds - keep keys ephemeral but extend sessions using token refresh:
+
+```go
+// Start with ephemeral key
+session, _ := client.CompleteAuthFlow(ctx, code, state, issuer)
+
+// Token refresh extends the session WITHOUT persisting keys
+if session.IsAccessTokenExpired(5 * time.Minute) {
+    newSession, err := client.RefreshToken(ctx, session)
+    if err != nil {
+        // Refresh failed - redirect to login
+        http.Redirect(w, r, "/login", http.StatusFound)
+        return
+    }
+
+    // newSession has SAME DPoPKey (still in memory only)
+    client.UpdateSession(sessionID, newSession)
+}
+```
+
+**Benefits:**
+- ✅ Keys remain ephemeral (secure)
+- ✅ Token refresh extends sessions (good UX)
+- ✅ Re-authentication only needed after restart (acceptable)
+- ✅ No encryption key management required
+
+**This approach:**
+- Keeps DPoP keys in memory only
+- Uses OAuth token refresh to maintain sessions
+- Only requires re-auth if application restarts (rare event)
+- Provides good security AND user experience balance
+
+**Recommended for:**
+- Production web applications
+- Applications with infrequent restarts
+- Teams without encryption infrastructure
+
+#### Option 3: Persisted Keys with Encryption (Advanced)
+
+If you absolutely need keys to survive restarts (e.g., mobile apps), you **MUST** encrypt them:
+
+```go
+import (
+    "crypto/aes"
+    "crypto/cipher"
+    "crypto/rand"
+    "crypto/x509"
+    "encoding/json"
+    "io"
+)
+
+type SecureRedisSessionStore struct {
+    client *redis.Client
+    gcm    cipher.AEAD  // AES-256-GCM cipher
+}
+
+func NewSecureRedisSessionStore(redisClient *redis.Client, encryptionKey []byte) (*SecureRedisSessionStore, error) {
+    // encryptionKey must be 32 bytes (AES-256)
+    block, err := aes.NewCipher(encryptionKey)
+    if err != nil {
+        return nil, err
+    }
+
+    gcm, err := cipher.NewGCM(block)
+    if err != nil {
+        return nil, err
+    }
+
+    return &SecureRedisSessionStore{
+        client: redisClient,
+        gcm:    gcm,
+    }, nil
+}
+
+func (s *SecureRedisSessionStore) Set(sessionID string, session *bskyoauth.Session) error {
+    // Serialize DPoP key to DER format
+    keyBytes, err := x509.MarshalECPrivateKey(session.DPoPKey)
+    if err != nil {
+        return fmt.Errorf("failed to marshal key: %w", err)
+    }
+
+    // Generate random nonce
+    nonce := make([]byte, s.gcm.NonceSize())
+    if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+        return fmt.Errorf("failed to generate nonce: %w", err)
+    }
+
+    // Encrypt the key
+    encryptedKey := s.gcm.Seal(nonce, nonce, keyBytes, nil)
+
+    // Create storage-safe session struct (without private key)
+    storageSession := struct {
+        DID                  string    `json:"did"`
+        AccessToken          string    `json:"access_token"`
+        RefreshToken         string    `json:"refresh_token"`
+        EncryptedDPoPKey     []byte    `json:"encrypted_dpop_key"`
+        PDS                  string    `json:"pds"`
+        DPoPNonce            string    `json:"dpop_nonce"`
+        AccessTokenExpiresAt time.Time `json:"access_token_expires_at"`
+        RefreshTokenExpiresAt time.Time `json:"refresh_token_expires_at"`
+    }{
+        DID:                   session.DID,
+        AccessToken:           session.AccessToken,
+        RefreshToken:          session.RefreshToken,
+        EncryptedDPoPKey:      encryptedKey,
+        PDS:                   session.PDS,
+        DPoPNonce:             session.DPoPNonce,
+        AccessTokenExpiresAt:  session.AccessTokenExpiresAt,
+        RefreshTokenExpiresAt: session.RefreshTokenExpiresAt,
+    }
+
+    data, err := json.Marshal(storageSession)
+    if err != nil {
+        return fmt.Errorf("failed to marshal session: %w", err)
+    }
+
+    return s.client.Set(context.Background(), "session:"+sessionID, data, 24*time.Hour).Err()
+}
+
+func (s *SecureRedisSessionStore) Get(sessionID string) (*bskyoauth.Session, error) {
+    data, err := s.client.Get(context.Background(), "session:"+sessionID).Bytes()
+    if err != nil {
+        return nil, err
+    }
+
+    var storageSession struct {
+        DID                  string    `json:"did"`
+        AccessToken          string    `json:"access_token"`
+        RefreshToken         string    `json:"refresh_token"`
+        EncryptedDPoPKey     []byte    `json:"encrypted_dpop_key"`
+        PDS                  string    `json:"pds"`
+        DPoPNonce            string    `json:"dpop_nonce"`
+        AccessTokenExpiresAt time.Time `json:"access_token_expires_at"`
+        RefreshTokenExpiresAt time.Time `json:"refresh_token_expires_at"`
+    }
+
+    if err := json.Unmarshal(data, &storageSession); err != nil {
+        return nil, fmt.Errorf("failed to unmarshal session: %w", err)
+    }
+
+    // Decrypt the DPoP key
+    if len(storageSession.EncryptedDPoPKey) < s.gcm.NonceSize() {
+        return nil, fmt.Errorf("encrypted key too short")
+    }
+
+    nonce := storageSession.EncryptedDPoPKey[:s.gcm.NonceSize()]
+    ciphertext := storageSession.EncryptedDPoPKey[s.gcm.NonceSize():]
+
+    keyBytes, err := s.gcm.Open(nil, nonce, ciphertext, nil)
+    if err != nil {
+        return nil, fmt.Errorf("failed to decrypt key: %w", err)
+    }
+
+    // Parse the decrypted key
+    dpopKey, err := x509.ParseECPrivateKey(keyBytes)
+    if err != nil {
+        return nil, fmt.Errorf("failed to parse key: %w", err)
+    }
+
+    return &bskyoauth.Session{
+        DID:                   storageSession.DID,
+        AccessToken:           storageSession.AccessToken,
+        RefreshToken:          storageSession.RefreshToken,
+        DPoPKey:               dpopKey,
+        PDS:                   storageSession.PDS,
+        DPoPNonce:             storageSession.DPoPNonce,
+        AccessTokenExpiresAt:  storageSession.AccessTokenExpiresAt,
+        RefreshTokenExpiresAt: storageSession.RefreshTokenExpiresAt,
+    }, nil
+}
+
+func (s *SecureRedisSessionStore) Delete(sessionID string) error {
+    return s.client.Del(context.Background(), "session:"+sessionID).Err()
+}
+```
+
+**⚠️ Security Requirements for Persisted Keys:**
+
+1. **Encryption**:
+   - Use AES-256-GCM (or similar AEAD cipher)
+   - Generate unique nonce for each encryption
+   - Never reuse nonces
+
+2. **Key Management**:
+   - Store encryption key in secrets manager (AWS Secrets Manager, HashiCorp Vault, etc.)
+   - **NEVER** commit encryption keys to version control
+   - Rotate encryption keys periodically (e.g., every 90 days)
+   - Use separate keys per environment (dev/staging/prod)
+
+3. **Storage Security**:
+   - Enable Redis encryption at rest
+   - Use TLS for Redis connections
+   - Restrict Redis network access (firewall rules)
+   - Enable Redis AUTH
+
+4. **Monitoring**:
+   - Log encryption key access
+   - Monitor for decryption failures (possible tampering)
+   - Alert on unusual session access patterns
+
+**Usage:**
+
+```go
+// Get encryption key from environment/secrets manager
+encryptionKey := getEncryptionKeyFromSecretsManager()  // 32 bytes
+
+store, err := NewSecureRedisSessionStore(redisClient, encryptionKey)
+if err != nil {
+    log.Fatal(err)
+}
+
+client := bskyoauth.NewClientWithOptions(bskyoauth.ClientOptions{
+    BaseURL:      "https://example.com",
+    SessionStore: store,
+})
+```
+
+**Recommended for:**
+- Mobile applications
+- Desktop applications
+- Applications with very infrequent deployment/restart
+
+**NOT recommended for:**
+- Web applications (use hybrid approach instead)
+- Teams without encryption infrastructure
+- Applications with frequent deployments
+
+#### Key Rotation
+
+DPoP keys are automatically rotated on each new authentication:
+- New OAuth flow = new DPoP key
+- Keys are bound to access token lifetime
+- No manual rotation needed for ephemeral keys
+
+For persisted keys, implement a rotation policy:
+- Rotate encryption keys every 90 days
+- Rotate on security events
+- Force re-authentication periodically (e.g., every 30 days)
+
+#### Summary Recommendations
+
+| Scenario | Recommendation |
+|----------|----------------|
+| Web application | **Hybrid approach** - ephemeral keys + token refresh |
+| API service | **Ephemeral keys** (default) |
+| Mobile app | **Encrypted persistence** with secrets manager |
+| Desktop app | **Encrypted persistence** with secure key storage |
+| High security | **Ephemeral keys** - maximum security |
+| Development | Simple Redis (from example above) is fine |
+
+**Default behavior (ephemeral keys) is secure and recommended for most applications.**
 
 ## Logging
 
