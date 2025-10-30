@@ -19,15 +19,35 @@ This security audit identified multiple areas for improvement in the bskyoauth l
 
 ## Low Priority / Best Practices
 
-### 15. Add Security Testing
+*No low priority issues remain.*
+
+---
+
+## COMPLETED ISSUES (Since v1.1.4)
+
+### 15. Add Security Testing ✅ **COMPLETED (v1.2.0)**
+**Status:** FIXED - See [CHANGELOG.md](CHANGELOG.md) and [VERSION.md](VERSION.md) for details
+
 **Issue:** No security-focused tests.
 
-**Recommendation:**
-- Add tests for CSRF protection
-- Test session expiration behavior
-- Test rate limiting
-- Add fuzzing for input validation
-- Consider penetration testing
+**Implementation:**
+- ✅ Added comprehensive CSRF protection tests (8 tests in `security_csrf_test.go`)
+- ✅ Added session security tests (6 tests in `security_session_test.go`)
+- ✅ Added rate limiting evasion tests (3 tests in `security_ratelimit_test.go`)
+- ✅ Added fuzzing for input validation (5 fuzz tests in `validation_fuzz_test.go`)
+- ⚠️ Penetration testing remains a recommendation for production deployments
+
+**Test Coverage:**
+- State parameter CSRF protection and replay attack prevention
+- Issuer validation for authorization code injection prevention
+- Session hijacking and fixation prevention
+- Session expiration enforcement (cookie, store, cleanup)
+- Cookie security flags (HttpOnly, Secure, SameSite)
+- Rate limit evasion via header manipulation
+- IPv6 rate limiting and distributed attacks
+- Fuzzing for handles, post text, NSIDs, and record structures
+
+**Impact:** Enhanced security confidence through comprehensive attack simulation and edge case testing.
 
 ---
 

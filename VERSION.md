@@ -9,7 +9,31 @@ This document tracks version changes for the bskyoauth module.
 - **Minor version (v1.x.0)**: New features, non-breaking enhancements
 - **Patch version (v1.0.x)**: Bug fixes, documentation updates, internal improvements
 
-## Current Version: v1.1.4
+## Current Version: v1.2.0
+
+### v1.2.0 (2025-10-29)
+
+**Minor version release** - Comprehensive security testing suite
+
+#### New Security Tests (22 tests total)
+- **CSRF Protection Tests** (8 tests): State validation, issuer validation, replay prevention, concurrent access
+- **Session Security Tests** (6 tests): Hijacking/fixation prevention, expiration, cookie security flags
+- **Rate Limiting Tests** (3 tests): Evasion attempts, IPv6 support, distributed attacks
+- **Input Validation Fuzzing** (5 fuzz tests): Handle, post text, text fields, NSIDs, record structures
+
+#### Files Added
+- `security_csrf_test.go` - CSRF attack simulation tests
+- `security_session_test.go` - Session security tests
+- `security_ratelimit_test.go` - Rate limit evasion tests
+- `validation_fuzz_test.go` - Fuzzing tests for validation
+
+#### Impact
+- **No Breaking Changes**: 100% backward compatible
+- **Attack Simulation**: Tests simulate real-world attack scenarios
+- **Fuzzing**: Continuous fuzzing to find edge cases
+- **Thread Safety**: Verified under concurrent access
+
+---
 
 ### v1.1.4 (2025-10-29)
 
