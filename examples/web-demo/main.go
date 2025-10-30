@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -58,6 +59,7 @@ func main() {
 	mux.HandleFunc("/post", apiLimiter.Middleware(postHandler(client)))
 	mux.HandleFunc("/create-record", apiLimiter.Middleware(createRecordHandler(client)))
 	mux.HandleFunc("/delete-record", apiLimiter.Middleware(deleteRecordHandler(client)))
+	mux.HandleFunc("/get-record", apiLimiter.Middleware(getRecordHandler(client)))
 	mux.HandleFunc("/logout", logoutHandler(client))
 
 	// Apply security headers middleware
@@ -158,6 +160,11 @@ func homeHandler(client *bskyoauth.Client) http.HandlerFunc {
 	<form action="/delete-record" method="post">
 		<input type="text" name="rkey" placeholder="Record key (rkey)" required><br>
 		<button type="submit">Delete Custom Record</button>
+	</form>
+	<br>
+	<form action="/get-record" method="get">
+		<input type="text" name="rkey" placeholder="Record key (rkey)" required><br>
+		<button type="submit">Get Record (JSON)</button>
 	</form>
 	<br>
 	<a href="/logout">Logout</a>`, session.DID)
@@ -478,6 +485,82 @@ func deleteRecordHandler(client *bskyoauth.Client) http.HandlerFunc {
 
 		log.Printf("Deleted com.demo.bskyoauth record with rkey: %s", rkey)
 		http.Redirect(w, r, "/", http.StatusFound)
+	}
+}
+
+func getRecordHandler(client *bskyoauth.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		sessionID, err := r.Cookie("session_id")
+		if err != nil {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+
+		session, err := client.GetSession(sessionID.Value)
+		if err != nil || session == nil {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+
+		// Check and refresh token if needed
+		session, err = checkAndRefreshToken(client, sessionID.Value, session, r)
+		if err != nil {
+			log.Printf("Token refresh failed, redirecting to login: %v", err)
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+
+		rkey := r.URL.Query().Get("rkey")
+		if rkey == "" {
+			http.Error(w, "Record key (rkey) is required", http.StatusBadRequest)
+			return
+		}
+
+		record, err := client.GetRecord(r.Context(), session, "com.demo.bskyoauth", rkey)
+		if err != nil {
+			// Check if error is due to expired token
+			if strings.Contains(err.Error(), "invalid_token") && strings.Contains(err.Error(), "401") {
+				log.Printf("Token expired during GetRecord, attempting refresh for session: %s", sessionID.Value)
+
+				requestID := bskyoauth.GenerateRequestID()
+				ctx := bskyoauth.WithRequestID(r.Context(), requestID)
+
+				newSession, refreshErr := client.RefreshToken(ctx, session)
+				if refreshErr != nil {
+					log.Printf("[%s] Token refresh failed: %v", requestID, refreshErr)
+					http.Error(w, "Session expired. Please log in again.", http.StatusUnauthorized)
+					return
+				}
+
+				if updateErr := client.UpdateSession(sessionID.Value, newSession); updateErr != nil {
+					log.Printf("[%s] Failed to update session after refresh: %v", requestID, updateErr)
+					http.Error(w, "Failed to update session", http.StatusInternalServerError)
+					return
+				}
+
+				log.Printf("[%s] Token refreshed, retrying GetRecord", requestID)
+
+				record, err = client.GetRecord(r.Context(), newSession, "com.demo.bskyoauth", rkey)
+				if err != nil {
+					http.Error(w, "Failed to get record: "+err.Error(), http.StatusInternalServerError)
+					return
+				}
+			} else {
+				http.Error(w, "Failed to get record: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		log.Printf("Retrieved com.demo.bskyoauth record: %s", rkey)
+
+		// Return record as JSON
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(record)
 	}
 }
 

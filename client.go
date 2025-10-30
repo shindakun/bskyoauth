@@ -181,6 +181,46 @@ func (c *Client) DeleteRecord(ctx context.Context, session *Session, collection,
 	return err
 }
 
+// GetRecord retrieves a record from the specified collection.
+// This is a low-level method that allows fetching any type of record.
+// Returns the record as a map[string]interface{} for flexibility.
+func (c *Client) GetRecord(ctx context.Context, session *Session, collection, rkey string) (map[string]interface{}, error) {
+	if session == nil || session.AccessToken == "" {
+		logger := LoggerFromContext(ctx)
+		logger.Error("no valid session for GetRecord")
+		return nil, ErrNoSession
+	}
+
+	// Use internal API client
+	apiClient := &api.Client{
+		TransportFactory: func(underlying http.RoundTripper, dpopKey *ecdsa.PrivateKey, token string, nonce string) http.RoundTripper {
+			return NewDPoPTransport(underlying, dpopKey, token, nonce)
+		},
+		LoggerGetter: func(ctx context.Context) api.Logger {
+			return LoggerFromContext(ctx)
+		},
+		ValidateNSID: ValidateCollectionNSID,
+	}
+
+	apiSession := &api.Session{
+		DID:         session.DID,
+		AccessToken: session.AccessToken,
+		DPoPKey:     session.DPoPKey,
+		DPoPNonce:   session.DPoPNonce,
+	}
+
+	record, err := apiClient.GetRecord(ctx, &api.GetRecordRequest{
+		Session:    apiSession,
+		Collection: collection,
+		Rkey:       rkey,
+	})
+
+	// Update session with the latest nonce
+	session.DPoPNonce = apiSession.DPoPNonce
+
+	return record, err
+}
+
 // GetClientMetadata returns the OAuth client metadata as a JSON-serializable map.
 func (c *Client) GetClientMetadata() map[string]interface{} {
 	return map[string]interface{}{

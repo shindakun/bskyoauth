@@ -76,8 +76,39 @@ This document tracks version changes for the bskyoauth module.
 
 Track minor version changes here for future releases.
 
-### Planned for v1.1.0 (Future)
-- (Add new features here as they are planned)
+### v1.1.0 (2025-10-29)
+
+**New Features**
+- Added `GetRecord()` method to retrieve records from any collection
+- Complements existing `CreateRecord()` and `DeleteRecord()` operations
+- Supports custom collections including `com.demo.bskyoauth`
+- Full DPoP authentication and nonce management
+- Automatic token refresh on expiration
+
+**API Changes**
+- `Client.GetRecord(ctx, session, collection, rkey)` - Public API
+- `internal/api.Client.GetRecord(ctx, req)` - Internal implementation
+- Returns `map[string]interface{}` for maximum flexibility
+
+**Example Usage**
+```go
+// Get a record by collection and rkey
+record, err := client.GetRecord(ctx, session, "com.demo.bskyoauth", "3k7qxyz...")
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Record text: %s\n", record["text"])
+```
+
+**Changes**
+- `internal/api/client.go`: Added `GetRecordRequest` type and `GetRecord()` method (~90 lines)
+- `client.go`: Added public `GetRecord()` wrapper method (~40 lines)
+- `examples/web-demo/main.go`: Added `/get-record` endpoint for demonstration (~85 lines)
+
+**Backward Compatibility**
+- ✅ 100% backward compatible with v1.0.0
+- ✅ All existing APIs unchanged
+- ✅ No breaking changes
 
 ### Planned for v1.0.1 (Future)
 - (Add bug fixes here as they are identified)

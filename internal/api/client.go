@@ -279,6 +279,102 @@ func (c *Client) DeleteRecord(ctx context.Context, req *DeleteRecordRequest) err
 	return nil
 }
 
+// GetRecordRequest contains parameters for getting a record
+type GetRecordRequest struct {
+	Session    *Session
+	Collection string
+	Rkey       string
+}
+
+// GetRecord retrieves a record from the repository
+func (c *Client) GetRecord(ctx context.Context, req *GetRecordRequest) (map[string]interface{}, error) {
+	logger := c.LoggerGetter(ctx)
+	logger.Info("getting record",
+		"did", req.Session.DID,
+		"collection", req.Collection,
+		"rkey", req.Rkey)
+
+	// Validate collection NSID
+	if c.ValidateNSID != nil {
+		if err := c.ValidateNSID(req.Collection); err != nil {
+			logger.Warn("invalid collection NSID",
+				"did", req.Session.DID,
+				"collection", req.Collection,
+				"error", err)
+			return nil, fmt.Errorf("invalid collection: %w", err)
+		}
+	}
+
+	// Validate rkey is not empty
+	if req.Rkey == "" {
+		return nil, fmt.Errorf("rkey cannot be empty")
+	}
+
+	// Get the actual PDS endpoint for this user
+	pdsHost, err := c.resolvePDSEndpoint(ctx, req.Session.DID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create HTTP client with DPoP transport
+	transport := c.TransportFactory(http.DefaultTransport, req.Session.DPoPKey, req.Session.AccessToken, req.Session.DPoPNonce)
+	httpClient := &http.Client{
+		Transport: transport,
+	}
+
+	xrpcClient := &xrpc.Client{
+		Host:   pdsHost,
+		Client: httpClient,
+	}
+
+	// Get the record using com.atproto.repo.getRecord
+	var output atproto.RepoGetRecord_Output
+
+	params := map[string]interface{}{
+		"repo":       req.Session.DID,
+		"collection": req.Collection,
+		"rkey":       req.Rkey,
+	}
+
+	err = xrpcClient.Do(ctx, xrpc.Query, "", "com.atproto.repo.getRecord", params, nil, &output)
+
+	// Update session with the latest nonce
+	if nonceGetter, ok := transport.(DPoPNonceGetter); ok {
+		req.Session.DPoPNonce = nonceGetter.GetNonce()
+	}
+
+	if err != nil {
+		logger.Error("failed to get record",
+			"did", req.Session.DID,
+			"collection", req.Collection,
+			"rkey", req.Rkey,
+			"error", err)
+		return nil, err
+	}
+
+	logger.Info("record retrieved successfully",
+		"did", req.Session.DID,
+		"collection", req.Collection,
+		"rkey", req.Rkey,
+		"uri", output.Uri)
+
+	// Return the record value directly from the LexiconTypeDecoder
+	// The caller can work with this value as needed
+	if output.Value != nil && output.Value.Val != nil {
+		return map[string]interface{}{
+			"value": output.Value.Val,
+			"uri":   output.Uri,
+			"cid":   output.Cid,
+		}, nil
+	}
+
+	// No value in output, return empty map with metadata
+	return map[string]interface{}{
+		"uri": output.Uri,
+		"cid": output.Cid,
+	}, nil
+}
+
 // resolvePDSEndpoint resolves the PDS endpoint for a given DID
 func (c *Client) resolvePDSEndpoint(ctx context.Context, did string) (string, error) {
 	dir := identity.DefaultDirectory()
