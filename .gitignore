@@ -34,6 +34,7 @@ Thumbs.db
 
 # Demo executables
 examples/web-demo/web-demo
+examples/web-demo-scope/web-demo-scope
 
 # Environment files
 .env
