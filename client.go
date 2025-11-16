@@ -59,7 +59,7 @@ func NewClientWithOptions(opts ClientOptions) *Client {
 
 	return &Client{
 		BaseURL:         baseURL,
-		ClientID:        baseURL + "/client-metadata.json",
+		ClientID:        baseURL + "/oauth-client-metadata.json",
 		RedirectURI:     baseURL + "/callback",
 		ClientName:      opts.ClientName,
 		ApplicationType: opts.ApplicationType,

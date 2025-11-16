@@ -128,7 +128,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", homeHandler(client))
 	mux.HandleFunc("/client-metadata.json", client.ClientMetadataHandler())
-	mux.HandleFunc("/login", authLimiter.Middleware(loginHandler(client)))
+	mux.HandleFunc("/login", authLimiter.Middleware(client.LoginHandler()))
 	mux.HandleFunc("/callback", authLimiter.Middleware(client.CallbackHandler(callbackSuccessHandler(sessionTimeoutDays))))
 	mux.HandleFunc("/post", apiLimiter.Middleware(postHandler(client)))
 	mux.HandleFunc("/create-record", apiLimiter.Middleware(createRecordHandler(client)))
@@ -353,32 +353,6 @@ func loginForm() string {
 		<input type="text" name="handle" placeholder="your-handle.bsky.social" required>
 		<button type="submit">Login with Bluesky</button>
 	</form>`
-}
-
-func loginHandler(client *bskyoauth.Client) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Add request ID for correlation
-		requestID := bskyoauth.GenerateRequestID()
-		ctx := bskyoauth.WithRequestID(r.Context(), requestID)
-
-		handle := r.URL.Query().Get("handle")
-		if handle == "" {
-			http.Error(w, "handle parameter required", http.StatusBadRequest)
-			return
-		}
-
-		log.Printf("[%s] Starting auth flow for handle: %s", requestID, handle)
-
-		flowState, err := client.StartAuthFlow(ctx, handle)
-		if err != nil {
-			log.Printf("[%s] Failed to start auth flow: %v", requestID, err)
-			http.Error(w, "Failed to start auth flow: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		log.Printf("[%s] Redirecting to: %s", requestID, flowState.AuthURL)
-		http.Redirect(w, r, flowState.AuthURL, http.StatusFound)
-	}
 }
 
 func callbackSuccessHandler(sessionTimeoutDays int) func(http.ResponseWriter, *http.Request, string) {

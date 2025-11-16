@@ -32,8 +32,9 @@ func ValidateHandle(handle string) error {
 		return fmt.Errorf("%w: handle is empty", ErrHandleInvalid)
 	}
 
-	// Use the AT Protocol syntax package for validation
-	_, err := syntax.ParseHandle(handle)
+	// Use ParseAtIdentifier for validation (same as used in OAuth flow)
+	// This is stricter than ParseHandle and ensures consistency
+	_, err := syntax.ParseAtIdentifier(handle)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrHandleInvalid, err)
 	}

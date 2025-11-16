@@ -66,6 +66,7 @@ func TestValidateHandle_InvalidCharacters(t *testing.T) {
 		"user!.example.com",     // exclamation
 		"user#name.example.com", // hash
 		"user.example..com",     // consecutive dots
+		"at:zsdfasd:asdfad",     // colons (AT URI format, not a valid handle)
 	}
 
 	for _, handle := range invalidHandles {

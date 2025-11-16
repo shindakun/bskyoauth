@@ -1,4 +1,4 @@
-module example.com/web-demo-chat
+module example.com/web-demo-scope
 
 go 1.25.3
 

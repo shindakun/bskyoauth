@@ -241,6 +241,13 @@ func loginHandler(client *bskyoauth.Client) http.HandlerFunc {
 			return
 		}
 
+		// Validate handle format before attempting auth flow
+		if err := bskyoauth.ValidateHandle(handle); err != nil {
+			log.Printf("[%s] Invalid handle: %s - %v", requestID, handle, err)
+			http.Error(w, fmt.Sprintf("invalid handle: %v", err), http.StatusBadRequest)
+			return
+		}
+
 		log.Printf("[%s] Starting auth flow for handle: %s", requestID, handle)
 
 		flowState, err := client.StartAuthFlow(ctx, handle)
