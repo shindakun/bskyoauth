@@ -23,7 +23,7 @@ func TestNewClient(t *testing.T) {
 		t.Errorf("BaseURL: expected %s, got %s", baseURL, client.BaseURL)
 	}
 
-	expectedClientID := baseURL + "/client-metadata.json"
+	expectedClientID := baseURL + "/oauth-client-metadata.json"
 	if client.ClientID != expectedClientID {
 		t.Errorf("ClientID: expected %s, got %s", expectedClientID, client.ClientID)
 	}
@@ -56,7 +56,7 @@ func TestNewClientWithTrailingSlash(t *testing.T) {
 		t.Errorf("BaseURL: expected %s, got %s", expectedBaseURL, client.BaseURL)
 	}
 
-	expectedClientID := "http://localhost:8181/client-metadata.json"
+	expectedClientID := "http://localhost:8181/oauth-client-metadata.json"
 	if client.ClientID != expectedClientID {
 		t.Errorf("ClientID: expected %s, got %s", expectedClientID, client.ClientID)
 	}
@@ -119,8 +119,8 @@ func TestGetClientMetadata(t *testing.T) {
 	metadata := client.GetClientMetadata()
 
 	// Verify required fields
-	if metadata["client_id"] != "https://oauth.example.com/client-metadata.json" {
-		t.Errorf("client_id: expected https://oauth.example.com/client-metadata.json, got %v", metadata["client_id"])
+	if metadata["client_id"] != "https://oauth.example.com/oauth-client-metadata.json" {
+		t.Errorf("client_id: expected https://oauth.example.com/oauth-client-metadata.json, got %v", metadata["client_id"])
 	}
 
 	if metadata["client_name"] != "Bluesky OAuth Client" {
@@ -180,8 +180,8 @@ func TestClientMetadataHandler(t *testing.T) {
 		t.Fatalf("Failed to decode JSON response: %v", err)
 	}
 
-	if metadata["client_id"] != "https://oauth.example.com/client-metadata.json" {
-		t.Errorf("JSON client_id: expected https://oauth.example.com/client-metadata.json, got %v", metadata["client_id"])
+	if metadata["client_id"] != "https://oauth.example.com/oauth-client-metadata.json" {
+		t.Errorf("JSON client_id: expected https://oauth.example.com/oauth-client-metadata.json, got %v", metadata["client_id"])
 	}
 }
 
@@ -351,22 +351,22 @@ func TestClientURLConstruction(t *testing.T) {
 	}{
 		{
 			baseURL:          "http://localhost:8181",
-			expectedClientID: "http://localhost:8181/client-metadata.json",
+			expectedClientID: "http://localhost:8181/oauth-client-metadata.json",
 			expectedRedirect: "http://localhost:8181/callback",
 		},
 		{
 			baseURL:          "https://oauth.example.com",
-			expectedClientID: "https://oauth.example.com/client-metadata.json",
+			expectedClientID: "https://oauth.example.com/oauth-client-metadata.json",
 			expectedRedirect: "https://oauth.example.com/callback",
 		},
 		{
 			baseURL:          "https://oauth.example.com:8443",
-			expectedClientID: "https://oauth.example.com:8443/client-metadata.json",
+			expectedClientID: "https://oauth.example.com:8443/oauth-client-metadata.json",
 			expectedRedirect: "https://oauth.example.com:8443/callback",
 		},
 		{
 			baseURL:          "http://192.168.1.100:3000",
-			expectedClientID: "http://192.168.1.100:3000/client-metadata.json",
+			expectedClientID: "http://192.168.1.100:3000/oauth-client-metadata.json",
 			expectedRedirect: "http://192.168.1.100:3000/callback",
 		},
 	}

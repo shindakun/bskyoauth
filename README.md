@@ -656,7 +656,7 @@ The library logs key security and operational events:
 
 **Development (Text Format):**
 ```
-time=2025-01-15T10:30:00.000-07:00 level=INFO msg="starting OAuth flow" handle=alice.bsky.social client_id=http://localhost:8181/client-metadata.json
+time=2025-01-15T10:30:00.000-07:00 level=INFO msg="starting OAuth flow" handle=alice.bsky.social client_id=http://localhost:8181/oauth-client-metadata.json
 time=2025-01-15T10:30:01.234-07:00 level=INFO msg="OAuth flow completed successfully" did=did:plc:abcd1234 issuer=https://bsky.social has_refresh_token=true
 ```
 

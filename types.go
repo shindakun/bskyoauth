@@ -12,7 +12,7 @@ type Client struct {
 	// BaseURL is the base URL of the OAuth client (e.g., "http://localhost:8181")
 	BaseURL string
 
-	// ClientID is the OAuth client identifier (typically BaseURL + "/client-metadata.json")
+	// ClientID is the OAuth client identifier (typically BaseURL + "/oauth-client-metadata.json")
 	ClientID string
 
 	// RedirectURI is where the OAuth provider redirects after authorization

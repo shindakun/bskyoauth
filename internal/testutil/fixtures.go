@@ -157,7 +157,7 @@ func NewTestClientConfig() *TestClientConfig {
 	baseURL := "http://localhost:8181"
 	return &TestClientConfig{
 		BaseURL:         baseURL,
-		ClientID:        baseURL + "/client-metadata.json",
+		ClientID:        baseURL + "/oauth-client-metadata.json",
 		RedirectURI:     baseURL + "/callback",
 		ClientName:      "Test OAuth Client",
 		ApplicationType: "web",
