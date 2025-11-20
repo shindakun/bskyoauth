@@ -53,6 +53,26 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	currentNonce := t.nonce
 	t.mu.Unlock()
 
+	// Preserve request body for potential retry
+	// We need to buffer the body so it can be re-read if we need to retry
+	var bodyBytes []byte
+	if req.Body != nil && req.Body != http.NoBody {
+		var err error
+		bodyBytes, err = io.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
+		req.Body.Close()
+
+		// Restore body for the first request
+		req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+		// Set GetBody so req.Clone() can recreate the body for retries
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewBuffer(bodyBytes)), nil
+		}
+	}
+
 	// Create DPoP proof for this request
 	dpopProof, err := createDPoPProof(t.dpopKey, req.Method, req.URL.String(), t.token, currentNonce)
 	if err != nil {
@@ -70,9 +90,9 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Check if we need to retry with nonce
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusBadRequest {
 		// Read the body to check for DPoP errors
-		bodyBytes, _ := io.ReadAll(resp.Body)
+		respBodyBytes, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		bodyStr := string(bodyBytes)
+		bodyStr := string(respBodyBytes)
 
 		// Check for DPoP-related errors that require a fresh nonce
 		isDPoPError := strings.Contains(bodyStr, "use_dpop_nonce") ||
@@ -96,6 +116,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 				}
 
 				// Clone the request for retry
+				// This will use GetBody to recreate the request body
 				retryReq := req.Clone(req.Context())
 				retryReq.Header.Set("DPoP", dpopProof)
 				retryReq.Header.Set("Authorization", "DPoP "+t.token)
@@ -107,11 +128,11 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 				}
 			} else {
 				// DPoP error but no nonce provided - restore body and return error
-				resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+				resp.Body = io.NopCloser(bytes.NewBuffer(respBodyBytes))
 			}
 		} else {
 			// Restore the body for non-DPoP errors
-			resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			resp.Body = io.NopCloser(bytes.NewBuffer(respBodyBytes))
 		}
 	}
 
