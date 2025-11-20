@@ -66,6 +66,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		// Restore body for the first request
 		req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		req.ContentLength = int64(len(bodyBytes))
 
 		// Set GetBody so req.Clone() can recreate the body for retries
 		req.GetBody = func() (io.ReadCloser, error) {
@@ -116,8 +117,15 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 				}
 
 				// Clone the request for retry
-				// This will use GetBody to recreate the request body
+				// Manually create a fresh request with a new body reader
 				retryReq := req.Clone(req.Context())
+				if len(bodyBytes) > 0 {
+					retryReq.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+					retryReq.ContentLength = int64(len(bodyBytes))
+					retryReq.GetBody = func() (io.ReadCloser, error) {
+						return io.NopCloser(bytes.NewReader(bodyBytes)), nil
+					}
+				}
 				retryReq.Header.Set("DPoP", dpopProof)
 				retryReq.Header.Set("Authorization", "DPoP "+t.token)
 
