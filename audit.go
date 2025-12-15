@@ -90,6 +90,8 @@ const (
 	AuditEventRecordCreate = "api.record.create" // Custom record created
 	AuditEventRecordDelete = "api.record.delete" // Custom record deleted
 	AuditEventRecordRead   = "api.record.read"   // Custom record retrieved
+	AuditEventRecordPut    = "api.record.put"    // Custom record created or updated
+	AuditEventRecordList   = "api.record.list"   // Records listed
 
 	// Security events
 	AuditEventSecurityIssuerMismatch = "security.issuer_mismatch" // Issuer validation failed

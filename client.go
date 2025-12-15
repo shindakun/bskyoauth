@@ -310,6 +310,255 @@ func (c *Client) GetRecord(ctx context.Context, session *Session, collection, rk
 	return record, err
 }
 
+// PutRecord creates or updates a record at a specific rkey in the repository.
+// Unlike CreateRecord which auto-generates an rkey, PutRecord lets you specify
+// the exact rkey, making it useful for updating existing records or creating
+// records with deterministic keys.
+func (c *Client) PutRecord(ctx context.Context, session *Session, collection, rkey string, record map[string]interface{}) (*atproto.RepoPutRecord_Output, error) {
+	if session == nil || session.AccessToken == "" {
+		logger := LoggerFromContext(ctx)
+		logger.Error("no valid session for PutRecord")
+		return nil, ErrNoSession
+	}
+
+	// Use internal API client
+	apiClient := &api.Client{
+		TransportFactory: func(underlying http.RoundTripper, dpopKey *ecdsa.PrivateKey, token string, nonce string) http.RoundTripper {
+			return NewDPoPTransport(underlying, dpopKey, token, nonce)
+		},
+		LoggerGetter: func(ctx context.Context) api.Logger {
+			return LoggerFromContext(ctx)
+		},
+		ValidateNSID:   ValidateCollectionNSID,
+		ValidateRecord: ValidateRecordFields,
+	}
+
+	apiSession := &api.Session{
+		DID:         session.DID,
+		AccessToken: session.AccessToken,
+		DPoPKey:     session.DPoPKey,
+		DPoPNonce:   session.DPoPNonce,
+	}
+
+	output, err := apiClient.PutRecord(ctx, &api.PutRecordRequest{
+		Session:    apiSession,
+		Collection: collection,
+		Rkey:       rkey,
+		Record:     record,
+	})
+
+	// Update session with the latest nonce
+	session.DPoPNonce = apiSession.DPoPNonce
+
+	// Audit: Record put
+	resourceURI := "at://" + session.DID + "/" + collection + "/" + rkey
+	if err != nil {
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventRecordPut,
+			Actor:     session.DID,
+			Action:    "put_record",
+			Resource:  resourceURI,
+			Result:    AuditResultFailure,
+			Error:     err.Error(),
+		})
+	} else {
+		var actualURI string
+		if output != nil {
+			actualURI = output.Uri
+		}
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventRecordPut,
+			Actor:     session.DID,
+			Action:    "put_record",
+			Resource:  actualURI,
+			Result:    AuditResultSuccess,
+			Metadata: map[string]interface{}{
+				"collection": collection,
+				"rkey":       rkey,
+			},
+		})
+	}
+
+	return output, err
+}
+
+// PutRecordWithSwap creates or updates a record with compare-and-swap semantics.
+// swapRecord is the CID of the existing record to replace (for updates).
+// swapCommit is the CID of the repo head (for optimistic concurrency).
+// Pass empty strings to skip swap checks.
+func (c *Client) PutRecordWithSwap(ctx context.Context, session *Session, collection, rkey string, record map[string]interface{}, swapRecord, swapCommit string) (*atproto.RepoPutRecord_Output, error) {
+	if session == nil || session.AccessToken == "" {
+		logger := LoggerFromContext(ctx)
+		logger.Error("no valid session for PutRecordWithSwap")
+		return nil, ErrNoSession
+	}
+
+	// Use internal API client
+	apiClient := &api.Client{
+		TransportFactory: func(underlying http.RoundTripper, dpopKey *ecdsa.PrivateKey, token string, nonce string) http.RoundTripper {
+			return NewDPoPTransport(underlying, dpopKey, token, nonce)
+		},
+		LoggerGetter: func(ctx context.Context) api.Logger {
+			return LoggerFromContext(ctx)
+		},
+		ValidateNSID:   ValidateCollectionNSID,
+		ValidateRecord: ValidateRecordFields,
+	}
+
+	apiSession := &api.Session{
+		DID:         session.DID,
+		AccessToken: session.AccessToken,
+		DPoPKey:     session.DPoPKey,
+		DPoPNonce:   session.DPoPNonce,
+	}
+
+	req := &api.PutRecordRequest{
+		Session:    apiSession,
+		Collection: collection,
+		Rkey:       rkey,
+		Record:     record,
+	}
+
+	if swapRecord != "" {
+		req.SwapRecord = &swapRecord
+	}
+	if swapCommit != "" {
+		req.SwapCommit = &swapCommit
+	}
+
+	output, err := apiClient.PutRecord(ctx, req)
+
+	// Update session with the latest nonce
+	session.DPoPNonce = apiSession.DPoPNonce
+
+	// Audit: Record put with swap
+	resourceURI := "at://" + session.DID + "/" + collection + "/" + rkey
+	if err != nil {
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventRecordPut,
+			Actor:     session.DID,
+			Action:    "put_record_swap",
+			Resource:  resourceURI,
+			Result:    AuditResultFailure,
+			Error:     err.Error(),
+		})
+	} else {
+		var actualURI string
+		if output != nil {
+			actualURI = output.Uri
+		}
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventRecordPut,
+			Actor:     session.DID,
+			Action:    "put_record_swap",
+			Resource:  actualURI,
+			Result:    AuditResultSuccess,
+			Metadata: map[string]interface{}{
+				"collection": collection,
+				"rkey":       rkey,
+				"swap":       true,
+			},
+		})
+	}
+
+	return output, err
+}
+
+// ListRecords lists records in a collection.
+// Use opts to specify pagination, limit, and other options.
+// Pass nil for opts to use defaults.
+func (c *Client) ListRecords(ctx context.Context, session *Session, collection string, opts *ListRecordsOptions) (*ListRecordsResult, error) {
+	if session == nil || session.AccessToken == "" {
+		logger := LoggerFromContext(ctx)
+		logger.Error("no valid session for ListRecords")
+		return nil, ErrNoSession
+	}
+
+	// Use internal API client
+	apiClient := &api.Client{
+		TransportFactory: func(underlying http.RoundTripper, dpopKey *ecdsa.PrivateKey, token string, nonce string) http.RoundTripper {
+			return NewDPoPTransport(underlying, dpopKey, token, nonce)
+		},
+		LoggerGetter: func(ctx context.Context) api.Logger {
+			return LoggerFromContext(ctx)
+		},
+		ValidateNSID: ValidateCollectionNSID,
+	}
+
+	apiSession := &api.Session{
+		DID:         session.DID,
+		AccessToken: session.AccessToken,
+		DPoPKey:     session.DPoPKey,
+		DPoPNonce:   session.DPoPNonce,
+	}
+
+	// Build request from options
+	req := &api.ListRecordsRequest{
+		Session:    apiSession,
+		Collection: collection,
+	}
+
+	if opts != nil {
+		req.Repo = opts.Repo
+		req.Limit = opts.Limit
+		req.Cursor = opts.Cursor
+		req.Reverse = opts.Reverse
+	}
+
+	response, err := apiClient.ListRecords(ctx, req)
+
+	// Update session with the latest nonce
+	session.DPoPNonce = apiSession.DPoPNonce
+
+	// Determine the repo being queried
+	repo := session.DID
+	if opts != nil && opts.Repo != "" {
+		repo = opts.Repo
+	}
+
+	// Audit: Record list
+	if err != nil {
+		_ = LogAuditEvent(ctx, AuditEvent{
+			EventType: AuditEventRecordList,
+			Actor:     session.DID,
+			Action:    "list_records",
+			Resource:  collection,
+			Result:    AuditResultFailure,
+			Error:     err.Error(),
+		})
+		return nil, err
+	}
+
+	// Convert internal response to public type
+	result := &ListRecordsResult{
+		Records: make([]RecordEntry, len(response.Records)),
+		Cursor:  response.Cursor,
+	}
+
+	for i, rec := range response.Records {
+		result.Records[i] = RecordEntry{
+			URI:   rec.URI,
+			CID:   rec.CID,
+			Value: rec.Value,
+		}
+	}
+
+	_ = LogAuditEvent(ctx, AuditEvent{
+		EventType: AuditEventRecordList,
+		Actor:     session.DID,
+		Action:    "list_records",
+		Resource:  collection,
+		Result:    AuditResultSuccess,
+		Metadata: map[string]interface{}{
+			"repo":     repo,
+			"count":    len(result.Records),
+			"has_more": result.Cursor != "",
+		},
+	})
+
+	return result, nil
+}
+
 // GetClientMetadata returns the OAuth client metadata as a JSON-serializable map.
 func (c *Client) GetClientMetadata() map[string]interface{} {
 	return map[string]interface{}{

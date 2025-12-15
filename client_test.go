@@ -1,6 +1,7 @@
 package bskyoauth
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -641,5 +642,164 @@ func TestApplicationTypeConstants(t *testing.T) {
 
 	if ApplicationTypeNative != "native" {
 		t.Errorf("Expected ApplicationTypeNative constant to be 'native', got %q", ApplicationTypeNative)
+	}
+}
+
+// TestPutRecordNoSession verifies PutRecord fails without a valid session.
+func TestPutRecordNoSession(t *testing.T) {
+	client := NewClient("http://localhost:8181")
+	ctx := context.Background()
+
+	// Test with nil session
+	_, err := client.PutRecord(ctx, nil, "com.example.test", "test-rkey", map[string]interface{}{
+		"text": "test",
+	})
+	if err != ErrNoSession {
+		t.Errorf("Expected ErrNoSession, got %v", err)
+	}
+
+	// Test with empty access token
+	session := &Session{
+		DID:         "did:plc:test123",
+		AccessToken: "",
+	}
+	_, err = client.PutRecord(ctx, session, "com.example.test", "test-rkey", map[string]interface{}{
+		"text": "test",
+	})
+	if err != ErrNoSession {
+		t.Errorf("Expected ErrNoSession for empty access token, got %v", err)
+	}
+}
+
+// TestPutRecordWithSwapNoSession verifies PutRecordWithSwap fails without a valid session.
+func TestPutRecordWithSwapNoSession(t *testing.T) {
+	client := NewClient("http://localhost:8181")
+	ctx := context.Background()
+
+	// Test with nil session
+	_, err := client.PutRecordWithSwap(ctx, nil, "com.example.test", "test-rkey", map[string]interface{}{
+		"text": "test",
+	}, "swap-cid", "")
+	if err != ErrNoSession {
+		t.Errorf("Expected ErrNoSession, got %v", err)
+	}
+}
+
+// TestListRecordsNoSession verifies ListRecords fails without a valid session.
+func TestListRecordsNoSession(t *testing.T) {
+	client := NewClient("http://localhost:8181")
+	ctx := context.Background()
+
+	// Test with nil session
+	_, err := client.ListRecords(ctx, nil, "com.example.test", nil)
+	if err != ErrNoSession {
+		t.Errorf("Expected ErrNoSession, got %v", err)
+	}
+
+	// Test with empty access token
+	session := &Session{
+		DID:         "did:plc:test123",
+		AccessToken: "",
+	}
+	_, err = client.ListRecords(ctx, session, "com.example.test", nil)
+	if err != ErrNoSession {
+		t.Errorf("Expected ErrNoSession for empty access token, got %v", err)
+	}
+}
+
+// TestListRecordsOptionsStruct verifies ListRecordsOptions fields.
+func TestListRecordsOptionsStruct(t *testing.T) {
+	opts := &ListRecordsOptions{
+		Repo:    "did:plc:other",
+		Limit:   50,
+		Cursor:  "cursor123",
+		Reverse: true,
+	}
+
+	if opts.Repo != "did:plc:other" {
+		t.Errorf("Expected Repo 'did:plc:other', got %s", opts.Repo)
+	}
+
+	if opts.Limit != 50 {
+		t.Errorf("Expected Limit 50, got %d", opts.Limit)
+	}
+
+	if opts.Cursor != "cursor123" {
+		t.Errorf("Expected Cursor 'cursor123', got %s", opts.Cursor)
+	}
+
+	if !opts.Reverse {
+		t.Error("Expected Reverse to be true")
+	}
+}
+
+// TestListRecordsResultStruct verifies ListRecordsResult fields.
+func TestListRecordsResultStruct(t *testing.T) {
+	result := &ListRecordsResult{
+		Records: []RecordEntry{
+			{
+				URI:   "at://did:plc:test/com.example.test/rkey1",
+				CID:   "bafyrei123",
+				Value: map[string]interface{}{"text": "test1"},
+			},
+			{
+				URI:   "at://did:plc:test/com.example.test/rkey2",
+				CID:   "bafyrei456",
+				Value: map[string]interface{}{"text": "test2"},
+			},
+		},
+		Cursor: "next-cursor",
+	}
+
+	if len(result.Records) != 2 {
+		t.Errorf("Expected 2 records, got %d", len(result.Records))
+	}
+
+	if result.Records[0].URI != "at://did:plc:test/com.example.test/rkey1" {
+		t.Errorf("Unexpected first record URI: %s", result.Records[0].URI)
+	}
+
+	if result.Cursor != "next-cursor" {
+		t.Errorf("Expected cursor 'next-cursor', got %s", result.Cursor)
+	}
+}
+
+// TestRecordEntryStruct verifies RecordEntry fields.
+func TestRecordEntryStruct(t *testing.T) {
+	entry := RecordEntry{
+		URI:   "at://did:plc:test/com.example.test/rkey",
+		CID:   "bafyrei789",
+		Value: map[string]interface{}{"text": "hello"},
+	}
+
+	if entry.URI != "at://did:plc:test/com.example.test/rkey" {
+		t.Errorf("Unexpected URI: %s", entry.URI)
+	}
+
+	if entry.CID != "bafyrei789" {
+		t.Errorf("Unexpected CID: %s", entry.CID)
+	}
+
+	valueMap, ok := entry.Value.(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected Value to be map[string]interface{}")
+	}
+
+	if valueMap["text"] != "hello" {
+		t.Errorf("Expected text 'hello', got %v", valueMap["text"])
+	}
+}
+
+// TestAuditEventRecordPut verifies the audit event constant for put record.
+func TestAuditEventRecordPut(t *testing.T) {
+	if AuditEventRecordPut != "api.record.put" {
+		t.Errorf("Expected AuditEventRecordPut to be 'api.record.put', got %s", AuditEventRecordPut)
+	}
+}
+
+// TestAuditEventRecordList verifies the audit event constant for list records.
+func TestAuditEventRecordList(t *testing.T) {
+	if AuditEventRecordList != "api.record.list" {
+		t.Errorf("Expected AuditEventRecordList to be 'api.record.list', got %s", AuditEventRecordList)
 	}
 }

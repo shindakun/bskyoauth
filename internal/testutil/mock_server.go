@@ -214,6 +214,9 @@ func NewMockPDSServer(t *testing.T) *MockPDSServer {
 	// Set up default handlers
 	mock.handlers["/xrpc/com.atproto.repo.createRecord"] = mock.handleCreateRecord
 	mock.handlers["/xrpc/com.atproto.repo.deleteRecord"] = mock.handleDeleteRecord
+	mock.handlers["/xrpc/com.atproto.repo.putRecord"] = mock.handlePutRecord
+	mock.handlers["/xrpc/com.atproto.repo.listRecords"] = mock.handleListRecords
+	mock.handlers["/xrpc/com.atproto.repo.getRecord"] = mock.handleGetRecord
 	mock.handlers["/xrpc/com.atproto.server.describeServer"] = mock.handleDescribeServer
 
 	// Create the server
@@ -292,6 +295,125 @@ func (m *MockPDSServer) handleDeleteRecord(w http.ResponseWriter, r *http.Reques
 	// Return success with fresh DPoP nonce
 	w.Header().Set("DPoP-Nonce", "test-nonce-"+RandomString(8))
 	w.WriteHeader(http.StatusOK)
+}
+
+// handlePutRecord handles record creation/update at a specific rkey.
+func (m *MockPDSServer) handlePutRecord(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check DPoP header
+	dpopHeader := r.Header.Get("DPoP")
+	if dpopHeader == "" {
+		http.Error(w, "Missing DPoP header", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse request
+	var req map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Get rkey from request
+	rkey, _ := req["rkey"].(string)
+	if rkey == "" {
+		rkey = "test-rkey-" + RandomString(13)
+	}
+
+	// Generate response
+	uri := fmt.Sprintf("at://%s/%s/%s", "did:plc:test123abc", req["collection"], rkey)
+	cid := "bafyrei" + RandomString(52)
+
+	response := map[string]interface{}{
+		"uri": uri,
+		"cid": cid,
+	}
+
+	// Return fresh DPoP nonce
+	w.Header().Set("DPoP-Nonce", "test-nonce-"+RandomString(8))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleListRecords handles listing records in a collection.
+func (m *MockPDSServer) handleListRecords(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check DPoP header
+	dpopHeader := r.Header.Get("DPoP")
+	if dpopHeader == "" {
+		http.Error(w, "Missing DPoP header", http.StatusUnauthorized)
+		return
+	}
+
+	// Get query parameters
+	repo := r.URL.Query().Get("repo")
+	collection := r.URL.Query().Get("collection")
+
+	// Generate mock records
+	records := []map[string]interface{}{
+		{
+			"uri":   fmt.Sprintf("at://%s/%s/record1", repo, collection),
+			"cid":   "bafyrei" + RandomString(52),
+			"value": map[string]interface{}{"$type": collection, "text": "Test record 1", "createdAt": "2024-01-01T00:00:00Z"},
+		},
+		{
+			"uri":   fmt.Sprintf("at://%s/%s/record2", repo, collection),
+			"cid":   "bafyrei" + RandomString(52),
+			"value": map[string]interface{}{"$type": collection, "text": "Test record 2", "createdAt": "2024-01-02T00:00:00Z"},
+		},
+	}
+
+	response := map[string]interface{}{
+		"records": records,
+	}
+
+	// Return fresh DPoP nonce
+	w.Header().Set("DPoP-Nonce", "test-nonce-"+RandomString(8))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleGetRecord handles retrieving a single record.
+func (m *MockPDSServer) handleGetRecord(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check DPoP header
+	dpopHeader := r.Header.Get("DPoP")
+	if dpopHeader == "" {
+		http.Error(w, "Missing DPoP header", http.StatusUnauthorized)
+		return
+	}
+
+	// Get query parameters
+	repo := r.URL.Query().Get("repo")
+	collection := r.URL.Query().Get("collection")
+	rkey := r.URL.Query().Get("rkey")
+
+	// Generate response
+	uri := fmt.Sprintf("at://%s/%s/%s", repo, collection, rkey)
+	cid := "bafyrei" + RandomString(52)
+
+	response := map[string]interface{}{
+		"uri":   uri,
+		"cid":   cid,
+		"value": map[string]interface{}{"$type": collection, "text": "Test record", "createdAt": "2024-01-01T00:00:00Z"},
+	}
+
+	// Return fresh DPoP nonce
+	w.Header().Set("DPoP-Nonce", "test-nonce-"+RandomString(8))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 // handleDescribeServer handles server description.

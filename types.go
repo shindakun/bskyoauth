@@ -119,3 +119,39 @@ type AuthServerMetadata struct {
 	Issuer                string `json:"issuer"`
 	JWKSURI               string `json:"jwks_uri"`
 }
+
+// ListRecordsOptions contains optional parameters for listing records.
+type ListRecordsOptions struct {
+	// Repo is the DID of the repository to list from (defaults to session's DID if empty)
+	Repo string
+
+	// Limit is the maximum number of records to return (default 50, max 100)
+	Limit int
+
+	// Cursor is the pagination cursor for fetching the next page
+	Cursor string
+
+	// Reverse returns results in reverse chronological order when true
+	Reverse bool
+}
+
+// ListRecordsResult contains the result of listing records.
+type ListRecordsResult struct {
+	// Records contains the list of records
+	Records []RecordEntry
+
+	// Cursor is the pagination cursor for the next page, empty if no more results
+	Cursor string
+}
+
+// RecordEntry represents a single record in a list response.
+type RecordEntry struct {
+	// URI is the AT URI of the record (at://did/collection/rkey)
+	URI string
+
+	// CID is the content identifier of the record
+	CID string
+
+	// Value is the record data
+	Value interface{}
+}

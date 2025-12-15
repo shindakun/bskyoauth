@@ -127,11 +127,13 @@ func main() {
 	// Set up HTTP handlers with rate limiting
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", homeHandler(client))
-	mux.HandleFunc("/client-metadata.json", client.ClientMetadataHandler())
+	mux.HandleFunc("/oauth-client-metadata.json", client.ClientMetadataHandler())
 	mux.HandleFunc("/login", authLimiter.Middleware(client.LoginHandler()))
 	mux.HandleFunc("/callback", authLimiter.Middleware(client.CallbackHandler(callbackSuccessHandler(sessionTimeoutDays))))
 	mux.HandleFunc("/post", apiLimiter.Middleware(postHandler(client)))
 	mux.HandleFunc("/create-record", apiLimiter.Middleware(createRecordHandler(client)))
+	mux.HandleFunc("/put-record", apiLimiter.Middleware(putRecordHandler(client)))
+	mux.HandleFunc("/list-records", apiLimiter.Middleware(listRecordsHandler(client)))
 	mux.HandleFunc("/delete-record", apiLimiter.Middleware(deleteRecordHandler(client)))
 	mux.HandleFunc("/get-record", apiLimiter.Middleware(getRecordHandler(client)))
 	mux.HandleFunc("/logout", logoutHandler(client))
@@ -315,22 +317,34 @@ func homeHandler(client *bskyoauth.Client) http.HandlerFunc {
 		<button type="submit">Post to Bluesky</button>
 	</form>
 	<br>
-	<h2>com.demo.bskyoauth</h2>
+	<h2>com.demo.bskyoauth Records</h2>
+	<h3>Create Record</h3>
 	<form action="/create-record" method="post">
-		<textarea name="text" rows="4" cols="50" placeholder="Custom record text..."></textarea><br>
-		<button type="submit">Create Custom Record</button>
+		<textarea name="text" rows="3" cols="50" placeholder="Custom record text..."></textarea><br>
+		<button type="submit">Create Record (auto-generated rkey)</button>
 	</form>
 	<br>
-	<form action="/delete-record" method="post">
-		<input type="text" name="rkey" placeholder="Record key (rkey)" required><br>
-		<button type="submit">Delete Custom Record</button>
+	<h3>Put Record (Create or Update at specific rkey)</h3>
+	<form action="/put-record" method="post">
+		<input type="text" name="rkey" placeholder="Record key (rkey)" required style="width: 300px;"><br>
+		<textarea name="text" rows="3" cols="50" placeholder="Record text..."></textarea><br>
+		<button type="submit">Put Record</button>
 	</form>
 	<br>
-	<form action="/get-record" method="get">
-		<input type="text" name="rkey" placeholder="Record key (rkey)" required><br>
+	<h3>List All Records</h3>
+	<a href="/list-records" style="display: inline-block; padding: 10px 15px; background: #0066cc; color: white; text-decoration: none; border-radius: 5px;">View All Records</a>
+	<br><br>
+	<h3>Get / Delete Record</h3>
+	<form action="/get-record" method="get" style="display: inline;">
+		<input type="text" name="rkey" placeholder="Record key (rkey)" required>
 		<button type="submit">Get Record (JSON)</button>
 	</form>
-	<br>
+	<br><br>
+	<form action="/delete-record" method="post" style="display: inline;">
+		<input type="text" name="rkey" placeholder="Record key (rkey)" required>
+		<button type="submit">Delete Record</button>
+	</form>
+	<br><br>
 	<a href="/logout">Logout</a>`, session.DID)
 			} else {
 				html += loginForm()
@@ -721,6 +735,306 @@ func getRecordHandler(client *bskyoauth.Client) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(record)
 	}
+}
+
+func putRecordHandler(client *bskyoauth.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		sessionID, err := r.Cookie("session_id")
+		if err != nil {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+
+		session, err := client.GetSession(sessionID.Value)
+		if err != nil || session == nil {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+
+		// Check and refresh token if needed
+		session, err = checkAndRefreshToken(client, sessionID.Value, session, r)
+		if err != nil {
+			log.Printf("Token refresh failed, redirecting to login: %v", err)
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+
+		rkey := r.FormValue("rkey")
+		if rkey == "" {
+			http.Error(w, "Record key (rkey) is required", http.StatusBadRequest)
+			return
+		}
+
+		text := r.FormValue("text")
+		if text == "" {
+			http.Error(w, "Text is required", http.StatusBadRequest)
+			return
+		}
+
+		// Validate text field
+		if err := bskyoauth.ValidateTextField(text, "text", 1000); err != nil {
+			http.Error(w, fmt.Sprintf("Invalid text: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		// Create record map
+		recordMap := map[string]interface{}{
+			"text":      text,
+			"createdAt": time.Now().Format(time.RFC3339),
+		}
+
+		output, err := client.PutRecord(r.Context(), session, "com.demo.bskyoauth", rkey, recordMap)
+		if err != nil {
+			// Check if error is due to expired token
+			if strings.Contains(err.Error(), "invalid_token") && strings.Contains(err.Error(), "401") {
+				log.Printf("Token expired during PutRecord, attempting refresh for session: %s", sessionID.Value)
+
+				requestID := bskyoauth.GenerateRequestID()
+				ctx := bskyoauth.WithRequestID(r.Context(), requestID)
+
+				newSession, refreshErr := client.RefreshToken(ctx, session)
+				if refreshErr != nil {
+					log.Printf("[%s] Token refresh failed: %v", requestID, refreshErr)
+					http.Error(w, "Session expired. Please log in again.", http.StatusUnauthorized)
+					return
+				}
+
+				if updateErr := client.UpdateSession(sessionID.Value, newSession); updateErr != nil {
+					log.Printf("[%s] Failed to update session after refresh: %v", requestID, updateErr)
+					http.Error(w, "Failed to update session", http.StatusInternalServerError)
+					return
+				}
+
+				log.Printf("[%s] Token refreshed, retrying PutRecord", requestID)
+
+				output, err = client.PutRecord(r.Context(), newSession, "com.demo.bskyoauth", rkey, recordMap)
+				if err != nil {
+					http.Error(w, "Failed to put record: "+err.Error(), http.StatusInternalServerError)
+					return
+				}
+			} else {
+				http.Error(w, "Failed to put record: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		log.Printf("Put com.demo.bskyoauth record: %s", output.Uri)
+
+		// Render success page
+		renderRecordCreatedPage(w, output.Uri, rkey)
+	}
+}
+
+func listRecordsHandler(client *bskyoauth.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		sessionID, err := r.Cookie("session_id")
+		if err != nil {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+
+		session, err := client.GetSession(sessionID.Value)
+		if err != nil || session == nil {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+
+		// Check and refresh token if needed
+		session, err = checkAndRefreshToken(client, sessionID.Value, session, r)
+		if err != nil {
+			log.Printf("Token refresh failed, redirecting to login: %v", err)
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+
+		// Parse optional query params
+		cursor := r.URL.Query().Get("cursor")
+		limitStr := r.URL.Query().Get("limit")
+		limit := 50 // default
+		if limitStr != "" {
+			if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 100 {
+				limit = parsed
+			}
+		}
+
+		opts := &bskyoauth.ListRecordsOptions{
+			Limit:  limit,
+			Cursor: cursor,
+		}
+
+		result, err := client.ListRecords(r.Context(), session, "com.demo.bskyoauth", opts)
+		if err != nil {
+			// Check if error is due to expired token
+			if strings.Contains(err.Error(), "invalid_token") && strings.Contains(err.Error(), "401") {
+				log.Printf("Token expired during ListRecords, attempting refresh for session: %s", sessionID.Value)
+
+				requestID := bskyoauth.GenerateRequestID()
+				ctx := bskyoauth.WithRequestID(r.Context(), requestID)
+
+				newSession, refreshErr := client.RefreshToken(ctx, session)
+				if refreshErr != nil {
+					log.Printf("[%s] Token refresh failed: %v", requestID, refreshErr)
+					http.Error(w, "Session expired. Please log in again.", http.StatusUnauthorized)
+					return
+				}
+
+				if updateErr := client.UpdateSession(sessionID.Value, newSession); updateErr != nil {
+					log.Printf("[%s] Failed to update session after refresh: %v", requestID, updateErr)
+					http.Error(w, "Failed to update session", http.StatusInternalServerError)
+					return
+				}
+
+				log.Printf("[%s] Token refreshed, retrying ListRecords", requestID)
+
+				result, err = client.ListRecords(r.Context(), newSession, "com.demo.bskyoauth", opts)
+				if err != nil {
+					http.Error(w, "Failed to list records: "+err.Error(), http.StatusInternalServerError)
+					return
+				}
+			} else {
+				http.Error(w, "Failed to list records: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		log.Printf("Listed %d com.demo.bskyoauth records", len(result.Records))
+
+		// Check Accept header - return JSON or HTML
+		accept := r.Header.Get("Accept")
+		if strings.Contains(accept, "application/json") {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(result)
+			return
+		}
+
+		// Render HTML page
+		renderListRecordsPage(w, result)
+	}
+}
+
+// renderListRecordsPage displays a list of records
+func renderListRecordsPage(w http.ResponseWriter, result *bskyoauth.ListRecordsResult) {
+	html := `<!DOCTYPE html>
+<html>
+<head>
+	<title>Records - Bluesky OAuth Demo</title>
+	<style>
+		body { font-family: Arial, sans-serif; max-width: 900px; margin: 50px auto; padding: 20px; }
+		h1 { color: #333; }
+		.record {
+			background: #f5f5f5;
+			padding: 15px;
+			margin: 10px 0;
+			border-radius: 5px;
+			border-left: 4px solid #0066cc;
+		}
+		.record-uri {
+			font-family: monospace;
+			font-size: 0.85em;
+			color: #666;
+			word-break: break-all;
+		}
+		.record-text {
+			margin: 10px 0;
+			font-size: 1.1em;
+		}
+		.record-actions {
+			margin-top: 10px;
+		}
+		.record-actions a, .record-actions button {
+			margin-right: 10px;
+			padding: 5px 10px;
+			text-decoration: none;
+			background: #0066cc;
+			color: white;
+			border: none;
+			border-radius: 3px;
+			cursor: pointer;
+			font-size: 12px;
+		}
+		.record-actions a:hover, .record-actions button:hover {
+			background: #0052a3;
+		}
+		.record-actions form { display: inline; }
+		.pagination {
+			margin: 20px 0;
+			padding: 10px;
+			background: #eee;
+			border-radius: 5px;
+		}
+		.pagination a {
+			padding: 8px 15px;
+			background: #0066cc;
+			color: white;
+			text-decoration: none;
+			border-radius: 3px;
+		}
+		.empty-state {
+			text-align: center;
+			padding: 40px;
+			color: #666;
+		}
+		.count { color: #666; margin-bottom: 20px; }
+	</style>
+</head>
+<body>
+	<h1>com.demo.bskyoauth Records</h1>
+	<p class="count">Found ` + fmt.Sprintf("%d", len(result.Records)) + ` record(s)</p>`
+
+	if len(result.Records) == 0 {
+		html += `<div class="empty-state">
+			<p>No records found in this collection.</p>
+			<p><a href="/">Create your first record</a></p>
+		</div>`
+	} else {
+		for _, rec := range result.Records {
+			rkey := extractRkeyFromURI(rec.URI)
+			text := ""
+			if valueMap, ok := rec.Value.(map[string]interface{}); ok {
+				if t, ok := valueMap["text"].(string); ok {
+					text = t
+				}
+			}
+
+			html += `<div class="record">
+				<div class="record-uri">` + rec.URI + `</div>
+				<div class="record-text">` + text + `</div>
+				<div class="record-actions">
+					<a href="/get-record?rkey=` + rkey + `">View JSON</a>
+					<form action="/delete-record" method="post">
+						<input type="hidden" name="rkey" value="` + rkey + `">
+						<button type="submit" onclick="return confirm('Delete this record?')">Delete</button>
+					</form>
+				</div>
+			</div>`
+		}
+	}
+
+	if result.Cursor != "" {
+		html += `<div class="pagination">
+			<a href="/list-records?cursor=` + result.Cursor + `">Load More</a>
+		</div>`
+	}
+
+	html += `
+	<hr>
+	<p><a href="/">← Back to Home</a></p>
+</body>
+</html>`
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(html))
 }
 
 func logoutHandler(client *bskyoauth.Client) http.HandlerFunc {
