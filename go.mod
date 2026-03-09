@@ -4,10 +4,10 @@ go 1.25.3
 
 require (
 	github.com/bluesky-social/indigo v0.0.0-20251029012702-8c31d8b88187
-	github.com/golang-jwt/jwt/v5 v5.3.0
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/ipfs/go-cid v0.6.0
 	github.com/whyrusleeping/cbor-gen v0.3.1
-	golang.org/x/time v0.14.0
+	golang.org/x/time v0.15.0
 )
 
 require (
